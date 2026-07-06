@@ -2130,29 +2130,44 @@ export default function CampaignMap({ campaign, leads }: CampaignMapProps) {
 
 ## Task 12: Sidebar — adicionar links de navegação
 
-**Arquivo:** `src/components/layout/Sidebar.tsx`
+**Arquivo:** `src/components/layout/Sidebar.tsx` (componente `AppSidebar`, construído sobre o `Sidebar` do shadcn/ui — ver `/docs/setup-next16-better-auth-neon.md` § Sidebar/Design System para a base já criada na Fase 1)
 
 - [ ] **Step 1: Atualizar `navItems` com todas as rotas de Fase 2**
 
 ```typescript
-import { BarChart2, Crosshair, LogOut, Map, Tag, Target, Users } from "lucide-react";
+import { BarChart2, Map, Tag, Users } from "lucide-react";
 
 const navItems = [
   { href: "/prospeccao", label: "Dashboard", icon: BarChart2, exact: true },
-  { href: "/prospeccao/nichos", label: "Nichos", icon: Tag },
-  { href: "/prospeccao/campanhas", label: "Campanhas", icon: Map },
-  { href: "/prospeccao/leads", label: "Leads", icon: Users },
+  { href: "/prospeccao/nichos", label: "Nichos", icon: Tag, exact: false },
+  { href: "/prospeccao/campanhas", label: "Campanhas", icon: Map, exact: false },
+  { href: "/prospeccao/leads", label: "Leads", icon: Users, exact: false },
 ];
 ```
 
-- [ ] **Step 2: Ajustar lógica de `active` para o Dashboard não ficar sempre ativo**
+- [ ] **Step 2: Renderizar cada item com `SidebarMenuButton`**
 
-```typescript
-// Trocar a lógica de active no .map() para:
-const active = item.exact
-  ? pathname === href
-  : pathname === href || pathname.startsWith(href + "/");
+O `Sidebar` do shadcn/ui usa o padrão `render` (base-ui) em vez de `asChild`: o `<Link>` é passado como elemento a renderizar, e o `isActive` controla o estado visual (`data-active`) sem precisar de classes condicionais manuais.
+
+```tsx
+<SidebarMenu>
+  {navItems.map(({ href, label, icon: Icon, exact }) => {
+    const active = exact
+      ? pathname === href
+      : pathname === href || pathname.startsWith(href + "/");
+    return (
+      <SidebarMenuItem key={href}>
+        <SidebarMenuButton isActive={active} render={<Link href={href} />}>
+          <Icon />
+          <span>{label}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  })}
+</SidebarMenu>
 ```
+
+Como a Fase 1 já entrega o `AppSidebar` construído sobre `Sidebar`/`SidebarMenu`/`SidebarMenuButton` do shadcn (não sobre `<div>`/`<a>` manuais), este Task só precisa acrescentar os 3 itens novos — nenhuma reestruturação do componente é necessária.
 
 ---
 
