@@ -24,6 +24,52 @@
 
 ---
 
+## Conceitos que você precisa entender antes de codar
+
+### Server Component como Data Loader vs Client Component buscando via API
+
+Toda página de listagem desta fase (nichos, campanhas, detalhe da campanha, leads) segue o mesmo formato:
+
+```tsx
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Leads" };
+}
+
+export default function LeadsPage() {
+  return (
+    <BasePageLayout>
+      <Suspense fallback={<LoadingContent title="Carregando leads..." withHeader={false} rows={6} />}>
+        <LeadsDataLoader />
+      </Suspense>
+    </BasePageLayout>
+  );
+}
+
+async function LeadsDataLoader() {
+  const { leads, campaigns } = await getLeadsBootstrapAction();
+  return <LeadsContent initialLeads={leads} initialCampaigns={campaigns} />;
+}
+```
+
+`page.tsx` é sempre um **Server Component enxuto**: `generateMetadata` + `BasePageLayout` (layout compartilhado) + `Suspense` com skeleton (`LoadingContent`) + uma função `async` interna (o "Data Loader") que chama uma **Server Action de bootstrap** (`get{Recurso}BootstrapAction`) e passa o resultado como prop para um **Client Component** colocado em `_components/` dentro da própria rota (ex: `nichos/_components/NichosContent.tsx`), que concentra toda a interatividade (formulários, dialogs, filtros, chamadas de mutação).
+
+**Por que não simplesmente um Client Component com `useEffect(() => fetch("/api/nichos"))`?** Essa é a alternativa mais óbvia para quem vem de React puro (SPA), e tecnicamente funciona — mas custa três coisas neste projeto:
+
+| | Server Component + bootstrap action | Client Component + rota GET |
+|---|---|---|
+| Onde roda a query no banco | No servidor, antes do HTML ser enviado | No servidor também, mas atrás de uma rota HTTP extra |
+| Tela em branco / spinner inicial | Não precisa — `Suspense` mostra o skeleton só enquanto o Data Loader resolve, e o conteúdo real já chega pronto | Sempre existe um primeiro render vazio até o `useEffect` responder |
+| Onde fica o guard de tenant (`requireUser`/`requireCompany`) | Uma vez, dentro da Server Action, reaproveitada tanto pelo Data Loader quanto por qualquer mutação | Duplicado: uma vez na rota GET, outra nas Server Actions de mutação |
+| Superfície exposta | Nenhuma rota HTTP nova — Server Actions não são endpoints públicos versionados | Uma rota `route.ts` por recurso, mesmo sem nenhum consumidor externo |
+
+A rota GET só faria sentido se algo **fora** do Next.js (um app mobile, um webhook, outro serviço) precisasse consumir os mesmos dados como API pública. Não é o caso aqui — é a própria página React consumindo, e nesse cenário o Server Component + Server Action elimina a camada HTTP redundante.
+
+**Onde fica leitura vs escrita:** tanto o bootstrap de leitura (`get-{recurso}-bootstrap.ts`) quanto as mutações (`create-`, `update-`, `delete-`, `run-`) ficam centralizadas em `src/app/actions/{feature}/*.ts` — não existe um `actions.ts` colocado por rota. O bootstrap é uma Server Action normal, só que é chamada de dentro do Data Loader (Server Component) em vez de por um formulário ou botão.
+
+**Polling sem rota REST:** o `handleRun`/`useEffect` de campanhas e do detalhe da campanha precisa reconsultar o status enquanto a busca roda em background (via `after()`). Em vez de `fetch()` numa rota GET, o Client Component chama a mesma Server Action de bootstrap diretamente — Server Actions podem ser invocadas do client livremente, sem precisar existir como endpoint HTTP.
+
+---
+
 ## Mapa de arquivos
 
 | Arquivo | Ação | Responsabilidade |
@@ -56,15 +102,26 @@
 | `src/app/actions/leads/update-lead-status.ts` | Criar | Server Action: atualizar status do lead |
 | `src/app/actions/leads/generate-diagnosis.ts` | Criar | Server Action: diagnóstico IA |
 | `src/app/actions/leads/generate-message.ts` | Criar | Server Action: mensagem IA |
+| `src/app/actions/nichos/get-nichos-bootstrap.ts` | Criar | Server Action: bootstrap de leitura para o Data Loader de nichos |
+| `src/app/actions/campanhas/get-campanhas-bootstrap.ts` | Criar | Server Action: bootstrap de leitura (e polling) para campanhas |
+| `src/app/actions/campanhas/get-campanha-detail-bootstrap.ts` | Criar | Server Action: bootstrap de leitura (e polling) para detalhe da campanha |
+| `src/app/actions/leads/get-leads-bootstrap.ts` | Criar | Server Action: bootstrap de leitura para o Data Loader de leads |
 | `src/components/TagInput.tsx` | Criar | Input de tags reutilizável |
 | `src/components/LeadsMap.tsx` | Criar | Mapa Leaflet de leads (client-only) |
 | `src/components/CampaignMap.tsx` | Criar | Mapa Leaflet de campanha (client-only) |
+| `src/components/BasePageLayout/BasePageLayout.tsx` | Criar | Wrapper de página: título/descrição opcionais + padding consistente |
+| `src/components/shared/loading-content.tsx` | Criar | Skeleton exibido pelo `Suspense` enquanto o Data Loader busca dados |
+| `src/components/ui/skeleton.tsx` | Criar (shadcn) | Primitivo de skeleton usado pelo `LoadingContent` |
 | `src/app/(protected)/layout.tsx` | Modificar | Adicionar links de nichos, campanhas, leads na sidebar |
 | `src/app/(protected)/prospeccao/page.tsx` | Modificar | Dashboard com métricas reais |
-| `src/app/(protected)/prospeccao/nichos/page.tsx` | Criar | CRUD de nichos |
-| `src/app/(protected)/prospeccao/campanhas/page.tsx` | Criar | Lista e criação de campanhas |
-| `src/app/(protected)/prospeccao/campanhas/[id]/page.tsx` | Criar | Detalhe da campanha com mapa |
-| `src/app/(protected)/prospeccao/leads/page.tsx` | Criar | Lista de leads com filtros + sheet IA |
+| `src/app/(protected)/prospeccao/nichos/page.tsx` | Criar | Server Component thin: `generateMetadata` + `BasePageLayout` + `Suspense` + Data Loader |
+| `src/app/(protected)/prospeccao/nichos/_components/NichosContent.tsx` | Criar | Client Component: CRUD de nichos (dialogs, TagInput, IA) |
+| `src/app/(protected)/prospeccao/campanhas/page.tsx` | Criar | Server Component thin: idem, para campanhas |
+| `src/app/(protected)/prospeccao/campanhas/_components/CampanhasContent.tsx` | Criar | Client Component: lista, criação e execução de campanhas + polling |
+| `src/app/(protected)/prospeccao/campanhas/[id]/page.tsx` | Criar | Server Component thin: idem, para detalhe da campanha |
+| `src/app/(protected)/prospeccao/campanhas/[id]/_components/CampanhaDetailContent.tsx` | Criar | Client Component: métricas, mapa e execução da campanha + polling |
+| `src/app/(protected)/prospeccao/leads/page.tsx` | Criar | Server Component thin: idem, para leads |
+| `src/app/(protected)/prospeccao/leads/_components/LeadsContent.tsx` | Criar | Client Component: filtros, mapa, sheet de detalhe e IA |
 
 ---
 
@@ -1516,7 +1573,7 @@ export async function runCampaignAction(campaignId: string) {
 }
 ```
 
-**Polling no cliente (campanhas/page.tsx e campanhas/[id]/page.tsx):**
+**Polling no cliente (`CampanhasContent.tsx` e `CampanhaDetailContent.tsx`, ver Tasks 15 e 16):** enquanto uma campanha está `running`, o Client Component chama a Server Action de bootstrap diretamente a cada 3s — sem rota REST:
 
 ```typescript
 // Ativa enquanto qualquer campanha estiver com status "running"
@@ -1525,7 +1582,7 @@ useEffect(() => {
   if (!hasRunning) return;
 
   const timer = setInterval(async () => {
-    const fresh: Campaign[] = await fetch("/api/campanhas").then((r) => r.json());
+    const { campaigns: fresh } = await getCampanhasBootstrapAction();
     setCampaigns((prev) => {
       for (const c of fresh) {
         const old = prev.find((p) => p.id === c.id);
@@ -1614,9 +1671,189 @@ export async function generateMessageAction(leadId: string) {
 }
 ```
 
+- [ ] **Step 9: Criar `src/app/actions/nichos/get-nichos-bootstrap.ts`**
+
+> Server Action de **leitura** (bootstrap), chamada pelo Data Loader do Server Component da página — não é uma rota GET. Ver "Server Component como Data Loader vs Client Component buscando via API" no início deste documento.
+
+```typescript
+"use server";
+
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
+
+export async function getNichosBootstrapAction() {
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const repo = new DrizzleNicheRepository(db);
+  const niches = await repo.findAllByCompany(companyId);
+  return { niches };
+}
+```
+
+- [ ] **Step 10: Criar `src/app/actions/campanhas/get-campanhas-bootstrap.ts`**
+
+```typescript
+"use server";
+
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
+
+export async function getCampanhasBootstrapAction() {
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const nicheRepo = new DrizzleNicheRepository(db);
+
+  const [campaigns, niches] = await Promise.all([
+    campaignRepo.findAllByCompany(companyId),
+    nicheRepo.findAllByCompany(companyId),
+  ]);
+
+  return { campaigns, niches };
+}
+```
+
+Essa mesma action também é usada pelo Client Component para o **polling** de status enquanto uma campanha está `running` — chamada direta do client, sem precisar de rota REST.
+
+- [ ] **Step 11: Criar `src/app/actions/campanhas/get-campanha-detail-bootstrap.ts`**
+
+```typescript
+"use server";
+
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
+
+export async function getCampanhaDetailBootstrapAction(campaignId: string) {
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const campaign = await campaignRepo.findById(campaignId, companyId);
+  if (!campaign) return { ok: false as const, error: "Campanha não encontrada" };
+
+  const nicheRepo = new DrizzleNicheRepository(db);
+  const leadRepo = new DrizzleLeadRepository(db);
+
+  const [niche, leads] = await Promise.all([
+    nicheRepo.findById(campaign.nicheId, companyId),
+    leadRepo.findByCampaign(campaignId, companyId),
+  ]);
+
+  return { ok: true as const, campaign, niche, leads };
+}
+```
+
+- [ ] **Step 12: Criar `src/app/actions/leads/get-leads-bootstrap.ts`**
+
+```typescript
+"use server";
+
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
+
+export async function getLeadsBootstrapAction() {
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const leadRepo = new DrizzleLeadRepository(db);
+  const campaignRepo = new DrizzleCampaignRepository(db);
+
+  const [leads, campaigns] = await Promise.all([
+    leadRepo.findAllByCompany(companyId),
+    campaignRepo.findAllByCompany(companyId),
+  ]);
+
+  return { leads, campaigns };
+}
+```
+
 ---
 
 ## Task 11: Componentes compartilhados
+
+- [ ] **Step 0a: Adicionar componente shadcn `skeleton`**
+
+```bash
+npx shadcn@latest add skeleton
+```
+
+- [ ] **Step 0b: Criar `src/components/BasePageLayout/BasePageLayout.tsx`**
+
+> Wrapper usado por toda página protegida — título/descrição opcionais + padding consistente. Substitui o bloco `<div className="flex flex-1 flex-col p-8"><h1>...` que antes era duplicado em cada página.
+
+```tsx
+import type { ReactNode } from "react";
+
+interface BasePageLayoutProps {
+  title?: string;
+  description?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}
+
+export function BasePageLayout({ title, description, actions, children }: BasePageLayoutProps) {
+  return (
+    <div className="flex flex-1 flex-col p-8">
+      {title && (
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+            {description && (
+              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+            )}
+          </div>
+          {actions}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+```
+
+`title` é opcional: páginas cujo Client Component já renderiza seu próprio cabeçalho rico (ex: detalhe da campanha, que mostra nome + badge + botão "Executar busca") passam `<BasePageLayout>` sem `title`, para não duplicar o `<h1>`.
+
+- [ ] **Step 0c: Criar `src/components/shared/loading-content.tsx`**
+
+> Skeleton exibido pelo `Suspense` enquanto o Data Loader (Server Component) busca os dados da página.
+
+```tsx
+import { Skeleton } from "@/components/ui/skeleton";
+
+interface LoadingContentProps {
+  title?: string;
+  withHeader?: boolean;
+  rows?: number;
+}
+
+export function LoadingContent({ title, withHeader = true, rows = 4 }: LoadingContentProps) {
+  return (
+    <div className="flex flex-1 flex-col gap-4">
+      {withHeader && (
+        <div className="space-y-2">
+          {title && <p className="text-sm text-muted-foreground">{title}</p>}
+          <Skeleton className="h-8 w-64" />
+        </div>
+      )}
+      <div className="space-y-3">
+        {Array.from({ length: rows }).map((_, i) => (
+          <Skeleton key={i} className="h-14 w-full rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
 
 - [ ] **Step 1: Criar `src/components/TagInput.tsx`**
 
@@ -2023,14 +2260,48 @@ export default async function DashboardPage() {
 
 ## Task 14: Nichos — `src/app/(protected)/prospeccao/nichos/page.tsx`
 
-- [ ] **Step 1: Criar a página de nichos**
+> Segue o padrão thin-page + Suspense + bootstrap action + `_components/` explicado em "Conceitos que você precisa entender antes de codar".
 
-A página é `"use client"` pois tem modais, formulários e estado interativo.
+- [ ] **Step 1: Criar `src/app/(protected)/prospeccao/nichos/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+import { Suspense } from "react";
+
+import { getNichosBootstrapAction } from "@/app/actions/nichos/get-nichos-bootstrap";
+import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
+import { LoadingContent } from "@/components/shared/loading-content";
+
+import { NichosContent } from "./_components/NichosContent";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Nichos" };
+}
+
+export default function NichosPage() {
+  return (
+    <BasePageLayout title="Nichos" description="Segmentos de mercado que você prospecta">
+      <Suspense fallback={<LoadingContent title="Carregando nichos..." withHeader={false} rows={4} />}>
+        <NichosDataLoader />
+      </Suspense>
+    </BasePageLayout>
+  );
+}
+
+async function NichosDataLoader() {
+  const { niches } = await getNichosBootstrapAction();
+  return <NichosContent initialNiches={niches} />;
+}
+```
+
+- [ ] **Step 2: Criar `src/app/(protected)/prospeccao/nichos/_components/NichosContent.tsx`**
+
+Toda a interatividade (modais, formulário, TagInput, chamadas às actions de mutação) fica aqui. Recebe `initialNiches` como estado inicial — sem `useEffect` de fetch.
 
 ```tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, Pencil, Plus, Power, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -2051,7 +2322,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-// Tipo parcial usado no formulário (sem campos do banco)
 type NicheForm = {
   name: string;
   description: string;
@@ -2072,22 +2342,17 @@ const emptyForm: NicheForm = {
   isActive: true,
 };
 
-export default function NichosPage() {
-  const [niches, setNiches] = useState<Niche[]>([]);
-  const [loading, setLoading] = useState(true);
+interface NichosContentProps {
+  initialNiches: Niche[];
+}
+
+export function NichosContent({ initialNiches }: NichosContentProps) {
+  const [niches, setNiches] = useState<Niche[]>(initialNiches);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Niche | null>(null);
   const [form, setForm] = useState<NicheForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/nichos")
-      .then((r) => r.json())
-      .then((data) => setNiches(data))
-      .catch(() => toast.error("Erro ao carregar nichos"))
-      .finally(() => setLoading(false));
-  }, []);
 
   function openCreate() {
     setEditing(null);
@@ -2145,17 +2410,25 @@ export default function NichosPage() {
   async function generateAI() {
     if (!form.name) { toast.error("Digite o nome do nicho primeiro"); return; }
     setGenerating(true);
-    // Presets locais enquanto não há IA para geração de nicho
     await new Promise((r) => setTimeout(r, 800));
     const name = form.name.toLowerCase();
-    if (name.includes("restaur") || name.includes("alimenta")) {
+    if (name.includes("restaur") || name.includes("alimenta") || name.includes("pizza")) {
       setForm((f) => ({
         ...f,
         description: "Estabelecimentos de alimentação que precisam de presença digital e captação de clientes online.",
-        keywords: ["restaurante", "pizzaria", "hamburgueria", "cafeteria"],
+        keywords: ["restaurante", "pizzaria", "hamburgueria", "cafeteria", "lanchonete"],
         targetServices: ["Site profissional", "Cardápio digital", "Google Meu Negócio"],
-        commonPains: ["Baixa presença digital", "Poucos pedidos online"],
+        commonPains: ["Baixa presença digital", "Poucos pedidos online", "Sem site próprio"],
         baseMessageTemplate: "Olá, {nome}! Vi que vocês estão em {cidade} e quero apresentar uma solução para aumentar seus pedidos online.",
+      }));
+    } else if (name.includes("salon") || name.includes("beleza") || name.includes("estet")) {
+      setForm((f) => ({
+        ...f,
+        description: "Salões de beleza e estética que buscam atrair novos clientes via redes sociais.",
+        keywords: ["salão", "beleza", "estética", "cabeleireiro", "barbearia"],
+        targetServices: ["Instagram profissional", "Agendamento online", "Google Ads"],
+        commonPains: ["Agenda vazia", "Dependência de indicações", "Sem presença no Instagram"],
+        baseMessageTemplate: "Oi, {nome}! Encontrei o salão de vocês em {cidade}. Posso ajudar a lotar a agenda usando o Instagram.",
       }));
     } else {
       setForm((f) => ({
@@ -2172,24 +2445,14 @@ export default function NichosPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Nichos</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Segmentos de mercado que você prospecta
-          </p>
-        </div>
+    <>
+      <div className="mb-4 flex justify-end">
         <Button onClick={openCreate} size="sm">
           <Plus className="mr-1.5 h-4 w-4" /> Novo nicho
         </Button>
       </div>
 
-      {loading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : niches.length === 0 ? (
+      {niches.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border py-20">
           <p className="text-sm text-muted-foreground">Nenhum nicho criado ainda</p>
           <Button onClick={openCreate} variant="outline" size="sm" className="mt-4">
@@ -2226,16 +2489,16 @@ export default function NichosPage() {
                 </Button>
                 {!niche.isActive && (
                   <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                    <AlertDialogTrigger>
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-destructive transition-all hover:bg-muted">
                         <Trash2 className="h-4 w-4" />
-                      </Button>
+                      </span>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Excluir nicho?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Esta ação não pode ser desfeita. O nicho "{niche.name}" será removido permanentemente.
+                          Esta ação não pode ser desfeita. O nicho &quot;{niche.name}&quot; será removido permanentemente.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -2253,7 +2516,6 @@ export default function NichosPage() {
         </div>
       )}
 
-      {/* Modal criar/editar */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -2263,12 +2525,7 @@ export default function NichosPage() {
             <div className="flex gap-2">
               <div className="flex-1 space-y-1.5">
                 <Label htmlFor="niche-name">Nome *</Label>
-                <Input
-                  id="niche-name"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Ex: Restaurantes"
-                />
+                <Input id="niche-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Ex: Restaurantes" />
               </div>
               <div className="flex items-end">
                 <Button type="button" variant="outline" size="sm" onClick={generateAI} disabled={generating}>
@@ -2280,15 +2537,10 @@ export default function NichosPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="niche-desc">Descrição</Label>
-              <Textarea
-                id="niche-desc"
-                rows={2}
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              />
+              <Textarea id="niche-desc" rows={2} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
             </div>
 
-            <TagInput label="Keywords" values={form.keywords} onChange={(v) => setForm((f) => ({ ...f, keywords: v }))} placeholder="restaurante, pizzaria..." />
+            <TagInput label="Keywords de busca" values={form.keywords} onChange={(v) => setForm((f) => ({ ...f, keywords: v }))} placeholder="restaurante, pizzaria..." />
             <TagInput label="Serviços oferecidos" values={form.targetServices} onChange={(v) => setForm((f) => ({ ...f, targetServices: v }))} placeholder="Site, Google Ads..." />
             <TagInput label="Dores comuns" values={form.commonPains} onChange={(v) => setForm((f) => ({ ...f, commonPains: v }))} placeholder="Sem presença digital..." />
 
@@ -2312,34 +2564,8 @@ export default function NichosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
-}
-```
-
-- [ ] **Step 2: Criar Route Handler para listar nichos**
-
-Criar `src/app/api/nichos/route.ts`:
-
-```typescript
-import { NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/infrastructure/db";
-import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
-import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
-
-export async function GET() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return NextResponse.json([], { status: 401 });
-
-  const companyRepo = new DrizzleCompanyRepository(db);
-  const company = await companyRepo.findByUserId(session.user.id);
-  if (!company) return NextResponse.json([], { status: 403 });
-
-  const nicheRepo = new DrizzleNicheRepository(db);
-  const niches = await nicheRepo.findAllByCompany(company.id);
-  return NextResponse.json(niches);
 }
 ```
 
@@ -2347,12 +2573,48 @@ export async function GET() {
 
 ## Task 15: Campanhas — `src/app/(protected)/prospeccao/campanhas/page.tsx`
 
-- [ ] **Step 1: Criar página de campanhas**
+> Segue o padrão thin-page + Suspense + bootstrap action + `_components/`.
+
+- [ ] **Step 1: Criar `src/app/(protected)/prospeccao/campanhas/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+import { Suspense } from "react";
+
+import { getCampanhasBootstrapAction } from "@/app/actions/campanhas/get-campanhas-bootstrap";
+import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
+import { LoadingContent } from "@/components/shared/loading-content";
+
+import { CampanhasContent } from "./_components/CampanhasContent";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Campanhas" };
+}
+
+export default function CampanhasPage() {
+  return (
+    <BasePageLayout title="Campanhas" description="Buscas georreferenciadas por nicho">
+      <Suspense fallback={<LoadingContent title="Carregando campanhas..." withHeader={false} rows={5} />}>
+        <CampanhasDataLoader />
+      </Suspense>
+    </BasePageLayout>
+  );
+}
+
+async function CampanhasDataLoader() {
+  const { campaigns, niches } = await getCampanhasBootstrapAction();
+  return <CampanhasContent initialCampaigns={campaigns} initialNiches={niches} />;
+}
+```
+
+- [ ] **Step 2: Criar `src/app/(protected)/prospeccao/campanhas/_components/CampanhasContent.tsx`**
+
+> **Polling sem rota REST:** enquanto alguma campanha está `running` (a busca roda em background via `after()`), o Client Component chama `getCampanhasBootstrapAction()` diretamente a cada 3s — Server Actions podem ser invocadas do client livremente, sem precisar existir como rota HTTP.
 
 ```tsx
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Eye, Loader2, MapPin, Play, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -2360,6 +2622,7 @@ import { toast } from "sonner";
 import type { Campaign } from "@/domain/repositories/ICampaignRepository";
 import type { Niche } from "@/domain/repositories/INicheRepository";
 import { createCampaignAction } from "@/app/actions/campanhas/create-campaign";
+import { getCampanhasBootstrapAction } from "@/app/actions/campanhas/get-campanhas-bootstrap";
 import { runCampaignAction } from "@/app/actions/campanhas/run-campaign";
 import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -2370,9 +2633,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { TagInput } from "@/components/TagInput";
 
-// cep armazena só dígitos (8 chars); a máscara XXXXX-XXX é feita no display
 type CampaignForm = {
   cep: string;
   nicheId: string;
@@ -2384,7 +2645,6 @@ type CampaignForm = {
   longitude: number;
   radiusKm: number;
   maxResults: number;
-  additionalKeywords: string[];
 };
 
 const DEFAULT_FORM: CampaignForm = {
@@ -2398,13 +2658,16 @@ const DEFAULT_FORM: CampaignForm = {
   longitude: 0,
   radiusKm: 5,
   maxResults: 50,
-  additionalKeywords: [],
 };
 
-export default function CampanhasPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [niches, setNiches] = useState<Niche[]>([]);
-  const [loading, setLoading] = useState(true);
+interface CampanhasContentProps {
+  initialCampaigns: Campaign[];
+  initialNiches: Niche[];
+}
+
+export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasContentProps) {
+  const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
+  const [niches] = useState<Niche[]>(initialNiches);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<CampaignForm>(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
@@ -2412,30 +2675,44 @@ export default function CampanhasPage() {
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState("");
 
+  // Polling automático enquanto qualquer campanha estiver "running"
   useEffect(() => {
-    Promise.all([
-      fetch("/api/campanhas").then((r) => r.json()),
-      fetch("/api/nichos").then((r) => r.json()),
-    ])
-      .then(([c, n]) => { setCampaigns(c); setNiches(n); })
-      .finally(() => setLoading(false));
-  }, []);
+    const hasRunning = campaigns.some((c) => c.status === "running");
+    if (!hasRunning) return;
 
-  // ViaCEP → cidade/estado | Nominatim → lat/lon
-  // Ambas gratuitas e sem API key. Nominatim: rate limit 1 req/s (OK para uso individual).
+    const timer = setInterval(async () => {
+      const { campaigns: fresh } = await getCampanhasBootstrapAction();
+      setCampaigns((prev) => {
+        for (const c of fresh) {
+          const old = prev.find((p) => p.id === c.id);
+          if (old?.status === "running" && c.status === "completed") {
+            setTimeout(() => toast.success(`${c.totalFound} leads encontrados`), 0);
+          } else if (old?.status === "running" && c.status === "failed") {
+            setTimeout(() => toast.error("Campanha falhou ao buscar leads"), 0);
+          }
+        }
+        return fresh;
+      });
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [campaigns]);
+
   async function fetchCep(digits: string) {
     setCepLoading(true);
     setCepError("");
     try {
-      const viacepData = await fetch(`https://viacep.com.br/ws/${digits}/json/`).then(r => r.json());
+      const viacepRes = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      const viacepData = await viacepRes.json();
       if (viacepData.erro) { setCepError("CEP não encontrado"); return; }
       const city: string = viacepData.localidade;
       const state: string = viacepData.uf;
       const query = encodeURIComponent(`${viacepData.logradouro || city}, ${city}, ${state}, Brazil`);
-      const nominatimData = await fetch(
+      const nominatimRes = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
         { headers: { "Accept-Language": "pt-BR" } }
-      ).then(r => r.json());
+      );
+      const nominatimData = await nominatimRes.json();
       const lat = nominatimData[0] ? parseFloat(nominatimData[0].lat) : 0;
       const lon = nominatimData[0] ? parseFloat(nominatimData[0].lon) : 0;
       setForm((f) => ({ ...f, city, state, latitude: lat, longitude: lon }));
@@ -2452,7 +2729,7 @@ export default function CampanhasPage() {
       return;
     }
     setSaving(true);
-    const result = await createCampaignAction(form);
+    const result = await createCampaignAction({ ...form, additionalKeywords: [] });
     setSaving(false);
     if (!result.ok) { toast.error(result.error); return; }
     setCampaigns((prev) => [...prev, result.data]);
@@ -2463,43 +2740,24 @@ export default function CampanhasPage() {
 
   async function handleRun(campaign: Campaign) {
     setRunning(campaign.id);
-    setCampaigns((prev) => prev.map((c) => c.id === campaign.id ? { ...c, status: "running" } : c));
-    const result = await runCampaignAction(campaign.id);
+    setCampaigns((prev) => prev.map((c) => (c.id === campaign.id ? { ...c, status: "running" } : c)));
+    // A action retorna imediatamente — AI + Overpass rodam em background.
+    // O polling detecta quando o status muda para completed/failed.
+    await runCampaignAction(campaign.id);
     setRunning(null);
-    if (!result.ok) {
-      toast.error(result.error);
-      setCampaigns((prev) => prev.map((c) => c.id === campaign.id ? { ...c, status: "failed" } : c));
-      return;
-    }
-    setCampaigns((prev) =>
-      prev.map((c) =>
-        c.id === campaign.id
-          ? { ...c, status: "completed", totalFound: result.totalFound, lastRunAt: new Date() }
-          : c
-      )
-    );
-    toast.success(`${result.totalFound} leads encontrados`);
   }
 
   const activeNiches = niches.filter((n) => n.isActive);
 
   return (
-    <div className="flex flex-1 flex-col p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Campanhas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Buscas georreferenciadas por nicho</p>
-        </div>
+    <>
+      <div className="mb-4 flex justify-end">
         <Button onClick={() => setOpen(true)} size="sm" disabled={activeNiches.length === 0}>
           <Plus className="mr-1.5 h-4 w-4" /> Nova campanha
         </Button>
       </div>
 
-      {loading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : campaigns.length === 0 ? (
+      {campaigns.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border py-20">
           <MapPin className="mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">Nenhuma campanha criada ainda</p>
@@ -2534,7 +2792,6 @@ export default function CampanhasPage() {
                     <TableCell className="text-center tabular-nums font-medium">{c.totalFound}</TableCell>
                     <TableCell>
                       <Badge className={CAMPAIGN_STATUS_CLASSES[c.status]}>
-                        {isRunning && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                         {CAMPAIGN_STATUS_LABEL[c.status]}
                       </Badge>
                     </TableCell>
@@ -2547,17 +2804,15 @@ export default function CampanhasPage() {
                           disabled={isRunning}
                           title="Executar busca"
                         >
-                          {isRunning ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Play className="h-4 w-4" />
-                          )}
+                          {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                         </Button>
-                        <Button variant="ghost" size="icon" asChild title="Ver detalhes">
-                          <Link href={`/prospeccao/campanhas/${c.id}`}>
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                        </Button>
+                        <Link
+                          href={`/prospeccao/campanhas/${c.id}`}
+                          title="Ver detalhes"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-all hover:bg-muted hover:text-foreground"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Link>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -2570,15 +2825,13 @@ export default function CampanhasPage() {
 
       {/* Modal nova campanha */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nova campanha</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label>Nicho *</Label>
-              {/* @base-ui/react/select não resolve o texto do item pelo value automaticamente.
-                  É preciso passar o texto como children de SelectValue explicitamente. */}
               <Select value={form.nicheId} onValueChange={(v) => { if (v) setForm((f) => ({ ...f, nicheId: v })); }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um nicho">
@@ -2596,9 +2849,6 @@ export default function CampanhasPage() {
               <Label>Nome da campanha *</Label>
               <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Ex: Restaurantes - SP Centro" />
             </div>
-            {/* CEP substitui lat/lon manual — usuário não sabe coordenadas de cor.
-                Fluxo: digitar CEP → clicar Buscar → ViaCEP preenche cidade/estado
-                → Nominatim converte em lat/lon → campos preenchidos automaticamente. */}
             <div className="space-y-1.5">
               <Label>CEP *</Label>
               <div className="flex gap-2">
@@ -2636,16 +2886,33 @@ export default function CampanhasPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Estado *</Label>
-                <Input maxLength={2} value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value.toUpperCase() }))} placeholder="SP" />
+                <Input
+                  maxLength={2}
+                  value={form.state}
+                  onChange={(e) => setForm((f) => ({ ...f, state: e.target.value.toUpperCase() }))}
+                  placeholder="SP"
+                />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Raio: {form.radiusKm} km</Label>
-              <Slider min={1} max={50} step={1} value={[form.radiusKm]} onValueChange={([v]) => setForm((f) => ({ ...f, radiusKm: v }))} />
+              <Slider
+                min={1}
+                max={50}
+                step={1}
+                value={[form.radiusKm]}
+                onValueChange={(vals: number | readonly number[]) => {
+                  const v = Array.isArray(vals) ? vals[0] : vals;
+                  setForm((f) => ({ ...f, radiusKm: v ?? f.radiusKm }));
+                }}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Máximo de resultados</Label>
-              <Select value={String(form.maxResults)} onValueChange={(v) => setForm((f) => ({ ...f, maxResults: parseInt(v, 10) }))}>
+              <Select
+                value={String(form.maxResults)}
+                onValueChange={(v) => { if (v) setForm((f) => ({ ...f, maxResults: parseInt(v, 10) })); }}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="25">25</SelectItem>
@@ -2654,7 +2921,6 @@ export default function CampanhasPage() {
                 </SelectContent>
               </Select>
             </div>
-            <TagInput label="Keywords adicionais" values={form.additionalKeywords} onChange={(v) => setForm((f) => ({ ...f, additionalKeywords: v }))} placeholder="bistrô, sushi..." />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
@@ -2665,32 +2931,8 @@ export default function CampanhasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
-}
-```
-
-- [ ] **Step 2: Criar `src/app/api/campanhas/route.ts`**
-
-```typescript
-import { NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/infrastructure/db";
-import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
-import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
-
-export async function GET() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return NextResponse.json([], { status: 401 });
-
-  const companyRepo = new DrizzleCompanyRepository(db);
-  const company = await companyRepo.findByUserId(session.user.id);
-  if (!company) return NextResponse.json([], { status: 403 });
-
-  const campaignRepo = new DrizzleCampaignRepository(db);
-  const campaigns = await campaignRepo.findAllByCompany(company.id);
-  return NextResponse.json(campaigns);
 }
 ```
 
@@ -2698,32 +2940,98 @@ export async function GET() {
 
 ## Task 16: Detalhe Campanha — `src/app/(protected)/prospeccao/campanhas/[id]/page.tsx`
 
-- [ ] **Step 1: Criar a pasta e o arquivo**
+> Segue o padrão thin-page + Suspense + bootstrap action + `_components/`. Como o Client Component já renderiza seu próprio cabeçalho rico (nome + badge + botão "Executar busca"), o `BasePageLayout` é usado **sem** `title` aqui.
+
+- [ ] **Step 1: Criar `src/app/(protected)/prospeccao/campanhas/[id]/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { Suspense } from "react";
+
+import { getCampanhaDetailBootstrapAction } from "@/app/actions/campanhas/get-campanha-detail-bootstrap";
+import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
+import { LoadingContent } from "@/components/shared/loading-content";
+
+import { CampanhaDetailContent } from "./_components/CampanhaDetailContent";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Detalhe da campanha" };
+}
+
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function CampanhaDetailPage({ params }: PageProps) {
+  const { id } = await params;
+
+  return (
+    <BasePageLayout>
+      <Suspense fallback={<LoadingContent title="Carregando campanha..." withHeader={false} rows={4} />}>
+        <CampanhaDetailDataLoader campaignId={id} />
+      </Suspense>
+    </BasePageLayout>
+  );
+}
+
+async function CampanhaDetailDataLoader({ campaignId }: { campaignId: string }) {
+  const result = await getCampanhaDetailBootstrapAction(campaignId);
+  if (!result.ok) redirect("/prospeccao/campanhas");
+
+  return (
+    <CampanhaDetailContent
+      initialCampaign={result.campaign}
+      initialNiche={result.niche}
+      initialLeads={result.leads}
+    />
+  );
+}
+```
+
+**Por que `redirect()` em vez do `router.replace` client-side de antes:** a checagem de tenant (`campaignRepo.findById(campaignId, companyId)` retornando `null`) agora acontece no servidor, dentro da Server Action de bootstrap — então o redirecionamento também é feito no servidor, antes de qualquer HTML chegar ao client.
+
+- [ ] **Step 2: Criar `src/app/(protected)/prospeccao/campanhas/[id]/_components/CampanhaDetailContent.tsx`**
+
+> **Polling sem rota REST:** o `useEffect` de polling agora chama `getCampanhaDetailBootstrapAction(campaign.id)` diretamente, em vez de `fetch(`/api/campanhas/${id}`)`.
 
 ```tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, Loader2, MessageCircle, Play, Target, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import type { Campaign } from "@/domain/repositories/ICampaignRepository";
 import type { Lead } from "@/domain/repositories/ILeadRepository";
 import type { Niche } from "@/domain/repositories/INicheRepository";
+import { getCampanhaDetailBootstrapAction } from "@/app/actions/campanhas/get-campanha-detail-bootstrap";
 import { runCampaignAction } from "@/app/actions/campanhas/run-campaign";
 import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const CampaignMap = dynamic(() => import("@/components/CampaignMap"), { ssr: false });
 
-function Metric({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
+function Metric({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  color: string;
+}) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
-      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${color}`}>{icon}</div>
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${color}`}>
+        {icon}
+      </div>
       <div>
         <p className="text-2xl font-bold tabular-nums text-foreground">{value}</p>
         <p className="text-xs text-muted-foreground">{label}</p>
@@ -2732,67 +3040,86 @@ function Metric({ label, value, icon, color }: { label: string; value: number; i
   );
 }
 
-export default function CampanhaDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [niche, setNiche] = useState<Niche | null>(null);
-  const [running, setRunning] = useState(false);
-  const [loading, setLoading] = useState(true);
+interface CampanhaDetailContentProps {
+  initialCampaign: Campaign;
+  initialNiche: Niche | null;
+  initialLeads: Lead[];
+}
 
+export function CampanhaDetailContent({
+  initialCampaign,
+  initialNiche,
+  initialLeads,
+}: CampanhaDetailContentProps) {
+  const [campaign, setCampaign] = useState<Campaign>(initialCampaign);
+  const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const [niche] = useState<Niche | null>(initialNiche);
+  const [running, setRunning] = useState(false);
+
+  // Polling enquanto campanha está em execução background (next/server after())
   useEffect(() => {
-    Promise.all([
-      fetch(`/api/campanhas/${id}`).then((r) => r.json()),
-      fetch(`/api/campanhas/${id}/leads`).then((r) => r.json()),
-    ]).then(([c, l]) => {
-      if (!c || c.error) { router.replace("/prospeccao/campanhas"); return; }
-      setCampaign(c.campaign);
-      setNiche(c.niche);
-      setLeads(l);
-    }).finally(() => setLoading(false));
-  }, [id]);
+    if (campaign.status !== "running") return;
+    const timer = setInterval(async () => {
+      const result = await getCampanhaDetailBootstrapAction(campaign.id);
+      if (!result.ok) return;
+      const fresh = result.campaign;
+      if (fresh.status === "completed") {
+        clearInterval(timer);
+        setCampaign(fresh);
+        setLeads(result.leads);
+        setTimeout(() => toast.success(`${fresh.totalFound} leads encontrados`), 0);
+      } else if (fresh.status === "failed") {
+        clearInterval(timer);
+        setCampaign(fresh);
+        setTimeout(() => toast.error("Campanha falhou ao buscar leads"), 0);
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [campaign.status, campaign.id]);
 
   async function handleRun() {
-    if (!campaign) return;
     setRunning(true);
-    setCampaign((c) => c ? { ...c, status: "running" } : c);
-    const result = await runCampaignAction(campaign.id);
+    setCampaign((c) => ({ ...c, status: "running" }));
+    // action retorna imediatamente — AI + Overpass rodam em background via after()
+    await runCampaignAction(campaign.id);
     setRunning(false);
-    if (!result.ok) { toast.error(result.error); setCampaign((c) => c ? { ...c, status: "failed" } : c); return; }
-    toast.success(`${result.totalFound} leads encontrados`);
-    // Recarregar leads
-    fetch(`/api/campanhas/${id}/leads`).then((r) => r.json()).then(setLeads);
-    setCampaign((c) => c ? { ...c, status: "completed", totalFound: result.totalFound, lastRunAt: new Date() } : c);
   }
 
-  if (loading) return <div className="flex flex-1 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
-  if (!campaign) return null;
-
   const qualified = leads.filter((l) => l.score >= 70).length;
-  const whatsappLikely = leads.filter((l) => l.whatsappStatus === "probable" || l.whatsappStatus === "confirmed").length;
-  const reached = leads.filter((l) => ["whatsapp_opened", "message_sent", "responded"].includes(l.status)).length;
+  const whatsappLikely = leads.filter(
+    (l) => l.whatsappStatus === "probable" || l.whatsappStatus === "confirmed"
+  ).length;
+  const reached = leads.filter((l) =>
+    ["whatsapp_opened", "message_sent", "responded"].includes(l.status)
+  ).length;
 
   return (
-    <div className="flex flex-1 flex-col p-8">
+    <>
       <div className="mb-6 flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/prospeccao/campanhas"><ArrowLeft className="h-4 w-4" /></Link>
-        </Button>
+        <Link
+          href="/prospeccao/campanhas"
+          className={cn(
+            "inline-flex h-8 w-8 items-center justify-center rounded-lg border-transparent text-sm font-medium transition-all hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
         <div className="flex-1">
           <h1 className="text-xl font-semibold text-foreground">{campaign.name}</h1>
-          {/* cep exibido formatado XXXXX-XXX se existir */}
           <p className="text-sm text-muted-foreground">
             {niche?.name} · {campaign.city}, {campaign.state}
             {campaign.cep ? ` (${campaign.cep.slice(0, 5)}-${campaign.cep.slice(5)})` : ""} · raio {campaign.radiusKm}km · máx {campaign.maxResults} resultados
           </p>
         </div>
         <Badge className={CAMPAIGN_STATUS_CLASSES[campaign.status]}>
-          {running && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
           {CAMPAIGN_STATUS_LABEL[campaign.status]}
         </Badge>
-        <Button onClick={handleRun} disabled={running} size="sm">
-          {running ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Play className="mr-1.5 h-4 w-4" />}
+        <Button onClick={handleRun} disabled={running || campaign.status === "running"} size="sm">
+          {running || campaign.status === "running" ? (
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          ) : (
+            <Play className="mr-1.5 h-4 w-4" />
+          )}
           Executar busca
         </Button>
       </div>
@@ -2805,7 +3132,7 @@ export default function CampanhaDetailPage() {
         <Metric label="Abordados" value={reached} icon={<CheckCircle2 className="h-4 w-4" />} color="text-violet-600 bg-violet-50" />
       </div>
 
-      {/* Parâmetros da busca — exibidos para rastreabilidade da campanha */}
+      {/* Parâmetros */}
       <div className="mb-6 rounded-xl border border-border bg-card p-4">
         <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Parâmetros da busca</p>
         <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
@@ -2818,21 +3145,11 @@ export default function CampanhaDetailPage() {
           </div>
           <div>
             <span className="text-muted-foreground">Coordenadas</span>
-            <p className="font-medium tabular-nums">
-              {campaign.latitude.toFixed(4)}, {campaign.longitude.toFixed(4)}
-            </p>
+            <p className="font-medium tabular-nums">{campaign.latitude.toFixed(4)}, {campaign.longitude.toFixed(4)}</p>
           </div>
           <div>
             <span className="text-muted-foreground">Raio / Máximo</span>
             <p className="font-medium">{campaign.radiusKm}km · {campaign.maxResults} leads</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Keywords extras</span>
-            <p className="font-medium">
-              {campaign.additionalKeywords.length > 0
-                ? campaign.additionalKeywords.join(", ")
-                : "—"}
-            </p>
           </div>
         </div>
       </div>
@@ -2850,69 +3167,16 @@ export default function CampanhaDetailPage() {
 
       {leads.length > 0 && (
         <div className="mt-4 flex justify-end">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/prospeccao/leads">Ver todos os leads</Link>
-          </Button>
+          <Link
+            href="/prospeccao/leads"
+            className="inline-flex h-7 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-all hover:bg-muted hover:text-foreground"
+          >
+            Ver todos os leads
+          </Link>
         </div>
       )}
-    </div>
+    </>
   );
-}
-```
-
-- [ ] **Step 2: Criar `src/app/api/campanhas/[id]/route.ts`**
-
-```typescript
-import { NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/infrastructure/db";
-import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
-import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
-import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
-
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const companyRepo = new DrizzleCompanyRepository(db);
-  const company = await companyRepo.findByUserId(session.user.id);
-  if (!company) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const campaignRepo = new DrizzleCampaignRepository(db);
-  const campaign = await campaignRepo.findById(id, company.id);
-  if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  const nicheRepo = new DrizzleNicheRepository(db);
-  const niche = await nicheRepo.findById(campaign.nicheId, company.id);
-
-  return NextResponse.json({ campaign, niche });
-}
-```
-
-- [ ] **Step 3: Criar `src/app/api/campanhas/[id]/leads/route.ts`**
-
-```typescript
-import { NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/infrastructure/db";
-import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
-import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
-
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return NextResponse.json([], { status: 401 });
-
-  const companyRepo = new DrizzleCompanyRepository(db);
-  const company = await companyRepo.findByUserId(session.user.id);
-  if (!company) return NextResponse.json([], { status: 403 });
-
-  const leadRepo = new DrizzleLeadRepository(db);
-  const leads = await leadRepo.findByCampaign(id, company.id);
-  return NextResponse.json(leads);
 }
 ```
 
@@ -2920,14 +3184,52 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 ## Task 17: Leads — `src/app/(protected)/prospeccao/leads/page.tsx`
 
-- [ ] **Step 1: Criar a página de leads**
+> Segue o padrão thin-page + Suspense + bootstrap action + `_components/`. Como o Client Component já renderiza seu próprio cabeçalho (título + contador + toggle Lista/Mapa), o `BasePageLayout` é usado sem `title`.
+
+- [ ] **Step 1: Criar `src/app/(protected)/prospeccao/leads/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+import { Suspense } from "react";
+
+import { getLeadsBootstrapAction } from "@/app/actions/leads/get-leads-bootstrap";
+import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
+import { LoadingContent } from "@/components/shared/loading-content";
+
+import { LeadsContent } from "./_components/LeadsContent";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Leads" };
+}
+
+export default function LeadsPage() {
+  return (
+    <BasePageLayout>
+      <Suspense fallback={<LoadingContent title="Carregando leads..." withHeader={false} rows={6} />}>
+        <LeadsDataLoader />
+      </Suspense>
+    </BasePageLayout>
+  );
+}
+
+async function LeadsDataLoader() {
+  const { leads, campaigns } = await getLeadsBootstrapAction();
+  return <LeadsContent initialLeads={leads} initialCampaigns={campaigns} />;
+}
+```
+
+- [ ] **Step 2: Criar `src/app/(protected)/prospeccao/leads/_components/LeadsContent.tsx`**
+
+Toda a lógica (filtros, paginação, mapa, sheet de detalhes, geração de diagnóstico/mensagem por IA) migra sem mudança de comportamento — só troca o `useEffect` de fetch inicial por props (`initialLeads`, `initialCampaigns`).
 
 ```tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Globe, Instagram, List, Loader2, Map, MessageCircle, Phone, Sparkles, Star } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Camera, Globe, List, Loader2, Map, MessageCircle, Phone, Sparkles, Star,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import type { Campaign } from "@/domain/repositories/ICampaignRepository";
@@ -2948,60 +3250,71 @@ import { Textarea } from "@/components/ui/textarea";
 
 const LeadsMap = dynamic(() => import("@/components/LeadsMap"), { ssr: false });
 
-const PER_PAGE = 10;
+const PER_PAGE = 15;
 
 const LEAD_STATUSES: LeadStatus[] = [
   "new", "qualified", "not_qualified", "whatsapp_opened",
   "message_sent", "responded", "lost", "do_not_contact",
 ];
 
-function Signal({ active, icon: Icon, label }: { active: boolean; icon: React.ElementType; label: string }) {
+function Signal({
+  active,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  icon: React.ElementType;
+  label: string;
+}) {
   return (
-    <div className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-border text-muted-foreground"}`}>
+    <div
+      className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${
+        active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-border text-muted-foreground"
+      }`}
+    >
       <Icon className="h-3 w-3" />
       {label}
     </div>
   );
 }
 
-export default function LeadsPage() {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
+interface LeadsContentProps {
+  initialLeads: Lead[];
+  initialCampaigns: Campaign[];
+}
+
+export function LeadsContent({ initialLeads, initialCampaigns }: LeadsContentProps) {
+  const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const [campaigns] = useState<Campaign[]>(initialCampaigns);
   const [view, setView] = useState<"list" | "map">("list");
   const [campaignId, setCampaignId] = useState("all");
   const [status, setStatus] = useState("all");
   const [minScore, setMinScore] = useState(0);
   const [onlyWa, setOnlyWa] = useState(false);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Lead | null>(null);
+  const [selected, setSelected] = useState<Lead | undefined>(undefined);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [generatingMsg, setGeneratingMsg] = useState(false);
   const [generatedMessage, setGeneratedMessage] = useState("");
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/leads").then((r) => r.json()),
-      fetch("/api/campanhas").then((r) => r.json()),
-    ])
-      .then(([l, c]) => { setLeads(l); setCampaigns(c); })
-      .finally(() => setLoading(false));
-  }, []);
-
-  const filtered = useMemo(() => leads.filter((l) => {
-    if (campaignId !== "all" && l.campaignId !== campaignId) return false;
-    if (status !== "all" && l.status !== status) return false;
-    if (l.score < minScore) return false;
-    if (onlyWa && !l.hasWhatsapp) return false;
-    return true;
-  }), [leads, campaignId, status, minScore, onlyWa]);
+  const filtered = useMemo(
+    () =>
+      leads.filter((l) => {
+        if (campaignId !== "all" && l.campaignId !== campaignId) return false;
+        if (status !== "all" && l.status !== status) return false;
+        if (l.score < minScore) return false;
+        if (onlyWa && !l.hasWhatsapp) return false;
+        return true;
+      }),
+    [leads, campaignId, status, minScore, onlyWa]
+  );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const pageLeads = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   function updateLead(id: string, patch: Partial<Lead>) {
     setLeads((arr) => arr.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-    setSelected((curr) => (curr?.id === id ? { ...curr, ...patch } : curr));
+    setSelected((curr) => (curr?.id === id ? ({ ...curr, ...patch } as Lead) : curr));
   }
 
   async function handleDiagnosis() {
@@ -3035,16 +3348,22 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col p-8">
+    <>
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Leads</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{filtered.length} lead{filtered.length !== 1 ? "s" : ""} encontrados</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {filtered.length} lead{filtered.length !== 1 ? "s" : ""} encontrado{filtered.length !== 1 ? "s" : ""}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant={view === "list" ? "default" : "outline"} size="sm" onClick={() => setView("list")}><List className="mr-1.5 h-4 w-4" /> Lista</Button>
-          <Button variant={view === "map" ? "default" : "outline"} size="sm" onClick={() => setView("map")}><Map className="mr-1.5 h-4 w-4" /> Mapa</Button>
+          <Button variant={view === "list" ? "default" : "outline"} size="sm" onClick={() => setView("list")}>
+            <List className="mr-1.5 h-4 w-4" /> Lista
+          </Button>
+          <Button variant={view === "map" ? "default" : "outline"} size="sm" onClick={() => setView("map")}>
+            <Map className="mr-1.5 h-4 w-4" /> Mapa
+          </Button>
         </div>
       </div>
 
@@ -3052,41 +3371,55 @@ export default function LeadsPage() {
       <div className="mb-4 flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-4">
         <div className="space-y-1.5">
           <Label className="text-xs">Campanha</Label>
-          <Select value={campaignId} onValueChange={(v) => { setCampaignId(v); setPage(1); }}>
-            <SelectTrigger className="h-8 w-48"><SelectValue /></SelectTrigger>
+          <Select value={campaignId} onValueChange={(v) => { if (v) { setCampaignId(v); setPage(1); } }}>
+            <SelectTrigger className="h-8 w-48">
+              <SelectValue>
+                {campaignId === "all" ? "Todas" : (campaigns.find((c) => c.id === campaignId)?.name ?? campaignId)}
+              </SelectValue>
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
-              {campaigns.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              {campaigns.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Status</Label>
-          <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+          <Select value={status} onValueChange={(v) => { if (v) { setStatus(v); setPage(1); } }}>
             <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              {LEAD_STATUSES.map((s) => <SelectItem key={s} value={s}>{LEAD_STATUS_LABEL[s]}</SelectItem>)}
+              {LEAD_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>{LEAD_STATUS_LABEL[s]}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
         <div className="min-w-40 space-y-1.5">
           <Label className="text-xs">Score mínimo: {minScore}</Label>
-          <Slider min={0} max={100} step={5} value={[minScore]} onValueChange={([v]) => { setMinScore(v); setPage(1); }} />
+          <Slider
+            min={0}
+            max={100}
+            step={5}
+            value={[minScore]}
+            onValueChange={(vals: number | readonly number[]) => {
+              const v = Array.isArray(vals) ? vals[0] : vals;
+              setMinScore(v ?? 0);
+              setPage(1);
+            }}
+          />
         </div>
         <div className="flex items-center gap-2">
           <Checkbox id="only-wa" checked={onlyWa} onCheckedChange={(v) => { setOnlyWa(!!v); setPage(1); }} />
-          <Label htmlFor="only-wa" className="text-xs cursor-pointer">Só com WhatsApp</Label>
+          <Label htmlFor="only-wa" className="cursor-pointer text-xs">Só com WhatsApp</Label>
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : view === "map" ? (
+      {view === "map" ? (
         <div className="overflow-hidden rounded-xl border border-border">
-          <LeadsMap leads={filtered} onSelect={setSelected} height={560} />
+          <LeadsMap leads={filtered} onSelect={(lead) => setSelected(lead)} height={560} />
         </div>
       ) : (
         <>
@@ -3108,43 +3441,53 @@ export default function LeadsPage() {
                       Nenhum lead corresponde aos filtros
                     </TableCell>
                   </TableRow>
-                ) : pageLeads.map((lead) => (
-                  <TableRow key={lead.id} className="cursor-pointer" onClick={() => { setSelected(lead); setGeneratedMessage(""); }}>
-                    <TableCell className="font-medium">{lead.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{lead.city}, {lead.state}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${scoreBg(lead.score)}`}>
-                        {lead.score}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {lead.hasWebsite && <Globe className="h-3.5 w-3.5 text-blue-500" />}
-                        {lead.hasInstagram && <Instagram className="h-3.5 w-3.5 text-pink-500" />}
-                        {lead.hasWhatsapp && <MessageCircle className="h-3.5 w-3.5 text-green-500" />}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={LEAD_STATUS_CLASSES[lead.status]}>{LEAD_STATUS_LABEL[lead.status]}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                ) : (
+                  pageLeads.map((lead) => (
+                    <TableRow
+                      key={lead.id}
+                      className="cursor-pointer"
+                      onClick={() => { setSelected(lead as Lead); setGeneratedMessage(""); }}
+                    >
+                      <TableCell className="font-medium">{lead.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{lead.city}, {lead.state}</TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${scoreBg(lead.score)}`}>
+                          {lead.score}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {lead.hasWebsite && <Globe className="h-3.5 w-3.5 text-blue-500" />}
+                          {lead.hasInstagram && <Camera className="h-3.5 w-3.5 text-pink-500" />}
+                          {lead.hasWhatsapp && <MessageCircle className="h-3.5 w-3.5 text-green-500" />}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={LEAD_STATUS_CLASSES[lead.status]}>{LEAD_STATUS_LABEL[lead.status]}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
           {totalPages > 1 && (
             <div className="mt-4 flex items-center justify-center gap-2">
-              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
+              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+                Anterior
+              </Button>
               <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>Próxima</Button>
+              <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
+                Próxima
+              </Button>
             </div>
           )}
         </>
       )}
 
       {/* Sheet de detalhes */}
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent className="w-full max-w-md overflow-y-auto">
+      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(undefined)}>
+        <SheetContent className="w-full max-w-md overflow-y-auto px-6">
           {selected && (
             <>
               <SheetHeader className="mb-4">
@@ -3153,7 +3496,6 @@ export default function LeadsPage() {
               </SheetHeader>
 
               <div className="space-y-5">
-                {/* Score e status */}
                 <div className="flex items-center gap-3">
                   <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-bold tabular-nums ${scoreBg(selected.score)}`}>
                     Score {selected.score}
@@ -3161,25 +3503,25 @@ export default function LeadsPage() {
                   <Badge className={LEAD_STATUS_CLASSES[selected.status]}>{LEAD_STATUS_LABEL[selected.status]}</Badge>
                 </div>
 
-                {/* Sinais digitais */}
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Presença digital</p>
                   <div className="flex flex-wrap gap-2">
                     <Signal active={selected.hasWebsite} icon={Globe} label="Website" />
-                    <Signal active={selected.hasInstagram} icon={Instagram} label="Instagram" />
+                    <Signal active={selected.hasInstagram} icon={Camera} label="Camera" />
                     <Signal active={selected.hasWhatsapp} icon={MessageCircle} label="WhatsApp" />
                   </div>
                 </div>
 
-                {/* Contato */}
-                {(selected.phone || selected.email) && (
+                {selected.phone && (
                   <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contato</p>
-                    {selected.phone && <p className="flex items-center gap-1.5 text-sm"><Phone className="h-3.5 w-3.5 text-muted-foreground" />{selected.phone}</p>}
+                    <p className="flex items-center gap-1.5 text-sm">
+                      <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                      {selected.phone}
+                    </p>
                   </div>
                 )}
 
-                {/* Rating */}
                 {selected.rating && (
                   <div className="flex items-center gap-1.5 text-sm">
                     <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
@@ -3188,7 +3530,6 @@ export default function LeadsPage() {
                   </div>
                 )}
 
-                {/* Diagnóstico IA */}
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Diagnóstico IA</p>
@@ -3207,7 +3548,6 @@ export default function LeadsPage() {
                   )}
                 </div>
 
-                {/* Mensagem WhatsApp */}
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mensagem WhatsApp</p>
@@ -3230,12 +3570,12 @@ export default function LeadsPage() {
                   )}
                 </div>
 
-                {/* Mudar status */}
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Alterar status</p>
                   <Select
                     value={selected.status}
                     onValueChange={async (v) => {
+                      if (!v) return;
                       const result = await updateLeadStatusAction(selected.id, v as LeadStatus);
                       if (result.ok) updateLead(selected.id, { status: v as LeadStatus });
                     }}
@@ -3253,32 +3593,8 @@ export default function LeadsPage() {
           )}
         </SheetContent>
       </Sheet>
-    </div>
+    </>
   );
-}
-```
-
-- [ ] **Step 2: Criar `src/app/api/leads/route.ts`**
-
-```typescript
-import { NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { db } from "@/infrastructure/db";
-import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
-import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
-
-export async function GET() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return NextResponse.json([], { status: 401 });
-
-  const companyRepo = new DrizzleCompanyRepository(db);
-  const company = await companyRepo.findByUserId(session.user.id);
-  if (!company) return NextResponse.json([], { status: 403 });
-
-  const leadRepo = new DrizzleLeadRepository(db);
-  const leads = await leadRepo.findAllByCompany(company.id);
-  return NextResponse.json(leads);
 }
 ```
 
