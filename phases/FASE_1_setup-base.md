@@ -26,8 +26,11 @@
 | `src/app/(auth)/layout.tsx` | Layout público centralizado |
 | `src/app/(auth)/login/page.tsx` | Página de login |
 | `src/app/(auth)/register/page.tsx` | Página de cadastro |
-| `src/app/(app)/layout.tsx` | Layout protegido (placeholder, sem sidebar ainda) |
-| `src/app/(app)/prospeccao/page.tsx` | Página inicial protegida (placeholder) |
+| `src/app/(protected)/layout.tsx` | Layout protegido: `SidebarProvider` + `AppSidebar` + `SidebarInset` |
+| `src/app/(protected)/prospeccao/page.tsx` | Página inicial protegida (placeholder) |
+| `src/components/layout/Sidebar.tsx` | `AppSidebar` — construída sobre o bloco `sidebar` do shadcn/ui |
+| `src/components/ui/sidebar.tsx` | Bloco `sidebar` do shadcn/ui (`npx shadcn add sidebar`) |
+| `src/hooks/use-mobile.ts` | Hook usado pelo `sidebar` para detectar viewport mobile |
 | `src/app/layout.tsx` | Root layout do Next.js |
 | `proxy.ts` | Proteção de rotas — redireciona não-autenticados para `/login` |
 
@@ -997,24 +1000,98 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-Crie `src/app/(auth)/login/page.tsx`:
+### Login e registro — Server Components + Server Actions, sem client SDK
+
+`signup.ts` já é uma Server Action que chama `auth.api.signUpEmail(...)` direto (nada de rota `/api/auth` sendo usada pelo client). O login segue o mesmo caminho, usando o plugin `nextCookies()` já configurado em `src/lib/auth.ts` — ele aplica o cookie de sessão automaticamente quando `auth.api.*` é chamado de dentro de uma Server Action (`asResponse: true` é o que permite ao plugin ler o `Set-Cookie` da resposta).
+
+- [ ] **Criar `src/app/actions/auth/login.ts`**
+
+```typescript
+"use server";
+
+import { z } from "zod";
+
+import { auth } from "@/lib/auth";
+
+const loginSchema = z.object({
+  email: z.string().email("Email inválido"),
+  password: z.string().min(1, "Senha obrigatória"),
+});
+
+export async function login(formData: {
+  email: string;
+  password: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const parsed = loginSchema.safeParse(formData);
+
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message };
+  }
+
+  const response = await auth.api.signInEmail({ body: parsed.data, asResponse: true });
+
+  if (!response.ok) {
+    const err = (await response.json()) as { message?: string };
+    return { ok: false, error: err.message ?? "Credenciais inválidas" };
+  }
+
+  return { ok: true };
+}
+```
+
+- [ ] **Adicionar `redirectIfAuthenticated()` em `src/lib/tenant.ts`**
+
+Ao lado de `requireUser()`/`requireCompany()`. Quem já tem sessão ativa não deveria conseguir abrir `/login` ou `/register` de novo:
+
+```typescript
+export async function redirectIfAuthenticated(destination = "/prospeccao") {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (session?.user) {
+    redirect(destination);
+  }
+}
+```
+
+- [ ] **Criar `src/app/(auth)/login/page.tsx`** — Server Component fino: só checa a sessão e renderiza o form. Sem `Suspense`/skeleton aqui — diferente das páginas de listagem da Fase 2, não há nenhum dado pra buscar antes de renderizar.
+
+```tsx
+import type { Metadata } from "next";
+
+import { redirectIfAuthenticated } from "@/lib/tenant";
+
+import { LoginForm } from "./_components/LoginForm";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Entrar" };
+}
+
+export default async function LoginPage() {
+  await redirectIfAuthenticated();
+
+  return <LoginForm />;
+}
+```
+
+- [ ] **Criar `src/app/(auth)/login/_components/LoginForm.tsx`** — toda a interatividade (estado, `handleSubmit`, toggle de mostrar/ocultar senha) fica aqui, chamando `login(...)` no lugar do client SDK:
 
 ```tsx
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { authClient } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
+
+import { login } from "@/app/actions/auth/login";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function LoginPage() {
+export function LoginForm() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1022,14 +1099,15 @@ export default function LoginPage() {
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
-    const { error: err } = await authClient.signIn.email({
+    const result = await login({
       email: form.get("email") as string,
       password: form.get("password") as string,
     });
 
-    if (err) {
-      setError(err.message || "Credenciais inválidas.");
-      setLoading(false);
+    setLoading(false);
+
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
 
@@ -1037,55 +1115,107 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>Entrar no ProspFlow</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">E-mail</Label>
-            <Input id="email" name="email" type="email" required />
+    <div className="w-full">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Bem-vindo de volta
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">Entre na sua conta para continuar</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="rounded-lg border border-destructive/25 bg-destructive/8 px-3.5 py-3 text-sm text-destructive">
+            {error}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="password">Senha</Label>
-            <Input id="password" name="password" type="password" required />
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required placeholder="voce@empresa.com" className="h-10" />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Senha</Label>
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              required
+              placeholder="••••••••"
+              className="h-10 pr-10"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              tabIndex={-1}
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-foreground"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
           </div>
-          <Button type="submit" disabled={loading}>
-            {loading ? "Entrando..." : "Entrar"}
-          </Button>
-          <p className="text-sm text-center text-gray-500">
-            Não tem conta?{" "}
-            <Link href="/register" className="underline">
-              Criar conta
-            </Link>
-          </p>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+
+        <Button type="submit" className="h-10 w-full" disabled={loading}>
+          {loading ? "Entrando..." : "Entrar"}
+        </Button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        Não tem conta?{" "}
+        <Link href="/register" className="font-medium text-primary transition-colors hover:text-primary/75">
+          Criar conta
+        </Link>
+      </p>
+    </div>
   );
 }
 ```
 
-Crie `src/app/(auth)/register/page.tsx`:
+- [ ] **Criar `src/app/(auth)/register/page.tsx`** — mesmo formato:
+
+```tsx
+import type { Metadata } from "next";
+
+import { redirectIfAuthenticated } from "@/lib/tenant";
+
+import { RegisterForm } from "./_components/RegisterForm";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Criar conta" };
+}
+
+export default async function RegisterPage() {
+  await redirectIfAuthenticated();
+
+  return <RegisterForm />;
+}
+```
+
+- [ ] **Criar `src/app/(auth)/register/_components/RegisterForm.tsx`** — chama `signup(...)` (cria usuário + empresa) e, em caso de sucesso, `login(...)` (estabelece a sessão) — as duas etapas de hoje, só que ambas Server Actions:
 
 ```tsx
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signupAction } from "@/app/actions/auth/signup";
+import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
+
+import { login } from "@/app/actions/auth/login";
+import { signup } from "@/app/actions/auth/signup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function RegisterPage() {
+export function RegisterForm() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1093,12 +1223,12 @@ export default function RegisterPage() {
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
-    const result = await signupAction({
-      name: form.get("name") as string,
-      email: form.get("email") as string,
-      password: form.get("password") as string,
-      companyName: form.get("companyName") as string,
-    });
+    const name = form.get("name") as string;
+    const email = form.get("email") as string;
+    const password = form.get("password") as string;
+    const companyName = form.get("companyName") as string;
+
+    const result = await signup({ name, email, password, companyName });
 
     if (!result.ok) {
       setError(result.error);
@@ -1106,50 +1236,91 @@ export default function RegisterPage() {
       return;
     }
 
+    const loginResult = await login({ email, password });
+
+    setLoading(false);
+
+    if (!loginResult.ok) {
+      setError("Conta criada. Tente fazer login.");
+      return;
+    }
+
     router.push("/prospeccao");
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>Criar conta no ProspFlow</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="companyName">Nome da empresa</Label>
-            <Input id="companyName" name="companyName" required />
+    <div className="w-full">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Criar conta</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          Comece a prospectar clientes hoje mesmo
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="rounded-lg border border-destructive/25 bg-destructive/8 px-3.5 py-3 text-sm text-destructive">
+            {error}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="name">Seu nome</Label>
-            <Input id="name" name="name" required />
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="name">Seu nome</Label>
+          <Input id="name" name="name" required placeholder="João Silva" className="h-10" />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="companyName">Nome da agência</Label>
+          <Input id="companyName" name="companyName" required placeholder="Acme Marketing" className="h-10" />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required placeholder="voce@empresa.com" className="h-10" />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Senha</Label>
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              required
+              minLength={8}
+              placeholder="Mínimo 8 caracteres"
+              className="h-10 pr-10"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              tabIndex={-1}
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-foreground"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">E-mail</Label>
-            <Input id="email" name="email" type="email" required />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="password">Senha</Label>
-            <Input id="password" name="password" type="password" minLength={8} required />
-          </div>
-          <Button type="submit" disabled={loading}>
-            {loading ? "Criando conta..." : "Criar conta"}
-          </Button>
-          <p className="text-sm text-center text-gray-500">
-            Já tem conta?{" "}
-            <Link href="/login" className="underline">
-              Entrar
-            </Link>
-          </p>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+
+        <Button type="submit" className="h-10 w-full" disabled={loading}>
+          {loading ? "Criando conta..." : "Criar conta grátis"}
+        </Button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        Já tem conta?{" "}
+        <Link href="/login" className="font-medium text-primary transition-colors hover:text-primary/75">
+          Entrar
+        </Link>
+      </p>
+    </div>
   );
 }
 ```
 
-Crie `src/app/(app)/layout.tsx` (placeholder — sidebar vem na Fase 2):
+Crie `src/app/(protected)/layout.tsx` (placeholder simples — a versão final, com `AppSidebar`, vem no "Passo extra — Sistema de Design e Sidebar" mais abaixo, ainda nesta fase):
 
 ```tsx
 import { requireUser } from "@/lib/tenant";
@@ -1174,7 +1345,7 @@ export default function RootPage() {
 
 ---
 
-Crie `src/app/(app)/prospeccao/page.tsx`:
+Crie `src/app/(protected)/prospeccao/page.tsx`:
 
 ```tsx
 import { requireUser, requireCompany } from "@/lib/tenant";
@@ -1347,13 +1518,140 @@ O sistema de tokens sobrescreve os defaults cinzas do shadcn/ui e garante consis
 
 Cada token tem equivalente para `.dark`, com background `oklch(0.118 0.016 264)` (preto com azul-violeta — mais sofisticado que preto puro).
 
-### Sidebar — `src/components/layout/Sidebar.tsx`
+### Sidebar — construída sobre o `Sidebar` do shadcn/ui
 
-Client Component com três zonas:
+A sidebar **não** é um `<aside>`/`<div>` escrito à mão — é construída sobre o bloco `sidebar` do shadcn/ui, que já resolve responsividade (vira um `Sheet` deslizante no mobile, fixa no desktop), estado ativo/colapsado e acessibilidade. Isso evita reescrever esse comportamento manualmente mais tarde, quando o menu ganhar mais itens nas próximas fases.
 
-1. **Logo**: ícone `Crosshair` em caixa indigo + wordmark
-2. **Nav**: links com estado ativo via `usePathname()`, classes condicionadas com `cn()`
-3. **User**: avatar com iniciais (max 2 letras), nome + empresa, botão de logout
+- [ ] **Adicionar o componente**
+
+```bash
+npx shadcn@latest add sidebar
+```
+
+Isso instala `src/components/ui/sidebar.tsx` e as dependências que ele usa internamente: `separator`, `sheet`, `skeleton`, `tooltip` e o hook `src/hooks/use-mobile.ts`.
+
+- [ ] **Criar `src/components/layout/Sidebar.tsx`** (exporta `AppSidebar`)
+
+Três zonas, montadas com as peças do shadcn (`SidebarHeader`, `SidebarContent`/`SidebarGroup`/`SidebarMenu`, `SidebarFooter`):
+
+1. **Header**: ícone `Crosshair` em caixa indigo + wordmark
+2. **Menu**: um item por rota, usando `SidebarMenuButton` com o padrão `render` (base-ui) em vez de `asChild` — o `<Link>` é passado como elemento a renderizar, e `isActive` controla o estilo do item ativo automaticamente (sem precisar de `cn()` manual)
+3. **Footer**: avatar com iniciais (máx. 2 letras), nome + empresa, botão de logout (`Button` do shadcn, não um `<button>` cru)
+
+```tsx
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { Crosshair, LogOut, Target } from "lucide-react";
+
+import { authClient } from "@/lib/auth-client";
+import { Button } from "@/components/ui/button";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
+
+interface AppSidebarProps {
+  user: { name: string; email: string };
+  company: { name: string };
+}
+
+// Só a rota da Fase 1. Cada fase seguinte adiciona seus próprios itens aqui
+// (ver Fase 2, Task 12) — a estrutura do componente não muda.
+const navItems = [{ href: "/prospeccao", label: "Prospecção", icon: Target, exact: true }];
+
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
+}
+
+export function AppSidebar({ user, company }: AppSidebarProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    await authClient.signOut();
+    router.push("/login");
+  }
+
+  const initials = getInitials(user.name);
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="h-14 flex-row items-center gap-2.5 border-b border-sidebar-border px-4">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary">
+          <Crosshair className="h-[15px] w-[15px] text-primary-foreground" strokeWidth={2.5} />
+        </div>
+        <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground">
+          ProspFlow
+        </span>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Menu</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map(({ href, label, icon: Icon, exact }) => {
+                const active = exact
+                  ? pathname === href
+                  : pathname === href || pathname.startsWith(href + "/");
+                return (
+                  <SidebarMenuItem key={href}>
+                    <SidebarMenuButton isActive={active} render={<Link href={href} />}>
+                      <Icon />
+                      <span>{label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border p-3">
+        <div className="flex items-center gap-2.5 rounded-lg px-1 py-1">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-medium leading-tight text-sidebar-foreground">
+              {user.name}
+            </p>
+            <p className="truncate text-[11px] leading-tight text-muted-foreground">
+              {company.name}
+            </p>
+          </div>
+          <Button
+            onClick={handleLogout}
+            title="Sair"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="h-[15px] w-[15px]" />
+          </Button>
+        </div>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
+```
 
 ```
 getInitials("João Silva") → "JS"
@@ -1364,22 +1662,44 @@ O logout chama `authClient.signOut()` e depois `router.push("/login")`.
 
 ### Layout protegido — `src/app/(protected)/layout.tsx`
 
-O layout vira Server Component async: busca `user` e `company` via `requireUser()` → `requireCompany()`, e passa para o `<Sidebar>` como props.
+O layout vira Server Component async: busca `user` e `company` via `requireUser()` → `requireCompany()`, e monta a estrutura oficial do bloco `sidebar` — `SidebarProvider` (contexto de aberto/fechado, inclusive no mobile) envolvendo `AppSidebar` + `SidebarInset` (a área de conteúdo). Um `<header>` com `SidebarTrigger` só aparece no mobile (`md:hidden`) — no desktop a sidebar já fica sempre visível, sem precisar de gatilho.
 
 ```tsx
-export default async function AppLayout({ children }) {
+import { Crosshair } from "lucide-react";
+
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { AppSidebar } from "@/components/layout/Sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const { company } = await requireCompany(user.id);
+
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar user={...} company={...} />
-      <main className="flex flex-1 flex-col overflow-y-auto">{children}</main>
-    </div>
+    <SidebarProvider className="h-screen overflow-hidden bg-background">
+      <AppSidebar user={{ name: user.name, email: user.email }} company={company} />
+      <SidebarInset className="overflow-y-auto">
+        <header className="flex h-14 shrink-0 items-center gap-2.5 border-b border-sidebar-border bg-sidebar px-4 md:hidden">
+          <SidebarTrigger />
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary">
+            <Crosshair className="h-[15px] w-[15px] text-primary-foreground" strokeWidth={2.5} />
+          </div>
+          <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground">
+            ProspFlow
+          </span>
+        </header>
+        {children}
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 ```
 
 A separação Server / Client é intencional: o layout busca os dados (Server), a sidebar reage ao pathname e dispara logout (Client). Dados fluem de cima para baixo — nunca o contrário.
+
+**Por que não escrever a sidebar à mão:** dava pra fazer um `<aside>` fixo com Tailwind puro (mais rápido de digitar na hora), mas aí o comportamento mobile (menu escondido, abrindo como overlay) teria que ser implementado manualmente — e não teria estado compartilhado (`useSidebar()`) caso outra parte da UI precise saber se o menu está aberto. Usar o bloco oficial do shadcn resolve isso de graça e é o mesmo padrão usado no resto do projeto para outros componentes (`Dialog`, `Sheet`, `Table`, etc.) — sidebar não deveria ser exceção.
+
+**Convenção do projeto:** toda vez que precisar de um botão clicável — mesmo pequeno, tipo o ícone de logout ou o toggle de mostrar senha nos formulários de login/registro — use o `Button` de `@/components/ui/button` (com `variant="ghost"` e `size="icon-sm"`/`icon-xs"` para botões só de ícone) em vez de um `<button>` cru. Mantém foco/estados de hover/disabled consistentes em todo o app sem precisar reimplementar isso a cada componente novo.
 
 ---
 
