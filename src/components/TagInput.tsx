@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 interface TagInputProps {
@@ -38,13 +39,15 @@ export function TagInput({ label, values, onChange, placeholder }: TagInputProps
         {values.map((tag) => (
           <Badge key={tag} variant="secondary" className="gap-1 pr-1">
             {tag}
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={() => onChange(values.filter((t) => t !== tag))}
-              className="ml-0.5 hover:text-destructive"
+              className="ml-0.5 size-4 rounded-sm text-current hover:bg-transparent hover:text-destructive"
             >
               <X className="h-3 w-3" />
-            </button>
+            </Button>
           </Badge>
         ))}
         <input

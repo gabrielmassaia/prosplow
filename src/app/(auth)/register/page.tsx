@@ -110,14 +110,16 @@ export default function RegisterPage() {
               placeholder="Mínimo 8 caracteres"
               className="h-10 pr-10"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               tabIndex={-1}
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-foreground"
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+            </Button>
           </div>
         </div>
 
