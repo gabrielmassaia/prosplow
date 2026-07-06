@@ -18,6 +18,16 @@ export async function requireUser() {
   return session.user;
 }
 
+export async function redirectIfAuthenticated(destination = "/prospeccao") {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (session?.user) {
+    redirect(destination);
+  }
+}
+
 export async function requireCompany(userId: string) {
   const result = await db
     .select({
