@@ -142,9 +142,9 @@ npx shadcn@latest add dialog alert-dialog sheet table select slider switch check
 
 Responder "Yes" para qualquer prompt de sobrescrita.
 
-- [ ] **Step 3: Adicionar Toaster do sonner no root layout**
+- [ ] **Step 3: Confirmar que o `<Toaster />` já está no root layout**
 
-Modificar `src/app/layout.tsx` — adicionar `<Toaster />` no body:
+`src/app/layout.tsx` já vem com o `Toaster` do sonner wireado desde a Fase 1 (Passo 16) — nada a fazer aqui além de confirmar que está lá antes de usar `toast()` nas próximas telas:
 
 ```tsx
 import { Toaster } from "sonner";
@@ -2184,7 +2184,7 @@ import { db } from "@/infrastructure/db";
 import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
 import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
-import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL, scoreBg } from "@/lib/format";
+import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 
 export default async function DashboardPage() {

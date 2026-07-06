@@ -11,7 +11,7 @@
 | Arquivo | Propósito |
 |---|---|
 | `drizzle.config.ts` | Configura o Drizzle Kit (onde está o schema, qual banco, onde gerar migrations) |
-| `.env.local.example` | Template das variáveis de ambiente necessárias |
+| `.env.example` | Template das variáveis de ambiente necessárias |
 | `src/infrastructure/db/index.ts` | Pool de conexão PostgreSQL singleton + instância Drizzle tipada |
 | `src/infrastructure/db/schema.ts` | Todas as tabelas da Fase 1 (4 do Better Auth + companies + company_members) |
 | `src/domain/repositories/IUserRepository.ts` | Contrato de repositório de usuário |
@@ -32,7 +32,7 @@
 | `src/components/ui/sidebar.tsx` | Bloco `sidebar` do shadcn/ui (`npx shadcn add sidebar`) |
 | `src/hooks/use-mobile.ts` | Hook usado pelo `sidebar` para detectar viewport mobile |
 | `src/app/layout.tsx` | Root layout do Next.js |
-| `proxy.ts` | Proteção de rotas — redireciona não-autenticados para `/login` |
+| `src/proxy.ts` | Proteção de rotas — redireciona não-autenticados para `/login` |
 
 ---
 
@@ -110,7 +110,7 @@ O cookie é HTTP-only — JavaScript do browser não consegue lê-lo. Isso previ
 
 ---
 
-### 4. Grupos de rotas no Next.js App Router: `(auth)` e `(app)`
+### 4. Grupos de rotas no Next.js App Router: `(auth)` e `(protected)`
 
 Parênteses no nome de uma pasta criam um **grupo de rotas** — a pasta existe na estrutura de arquivos mas não aparece na URL.
 
@@ -119,13 +119,13 @@ app/
 ├── (auth)/
 │   ├── login/page.tsx     → URL: /login
 │   └── register/page.tsx  → URL: /register
-└── (app)/
+└── (protected)/
     └── prospeccao/page.tsx → URL: /prospeccao
 ```
 
 Por que usamos isso? Para ter **layouts diferentes** sem afetar as URLs:
 - `(auth)/layout.tsx` → tela centralizada, sem sidebar, sem autenticação
-- `(app)/layout.tsx` → com sidebar, verifica sessão
+- `(protected)/layout.tsx` → com sidebar, verifica sessão
 
 Se não usássemos grupos, teríamos que colocar tudo no mesmo layout e fazer lógica condicional feia.
 
@@ -354,15 +354,15 @@ npx shadcn@latest init
 ```
 
 Quando perguntar, escolha:
-- Style: Default
-- Base color: Slate
+- Style: base-nova
+- Base color: Neutral
 - CSS variables: Yes
 
 ```bash
-npx shadcn@latest add button input label card badge
+npx shadcn@latest add button input label card
 ```
 
-Isso cria `src/components/ui/` com os componentes base que a Fase 1 usa.
+Isso cria `src/components/ui/` com os componentes base que a Fase 1 usa. `badge` só entra na Fase 2 (Task 1), quando passa a ser usado de fato — instalar antes disso deixaria um componente sem uso.
 
 ---
 
@@ -388,7 +388,7 @@ npx better-auth secret
 > ```
 > Isso gera 32 bytes aleatórios em hex — exatamente o que o Better Auth espera.
 
-Crie também `.env.local.example` (sem valores reais — vai para o git):
+Crie também `.env.example` (sem valores reais — vai para o git):
 ```env
 DATABASE_URL=
 BETTER_AUTH_URL=http://localhost:3000
@@ -432,9 +432,9 @@ export default defineConfig({
 Crie `src/infrastructure/db/index.ts`:
 
 ```typescript
-import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+
 import * as schema from "./schema";
 
 declare global {
@@ -443,7 +443,7 @@ declare global {
 
 let connectionString = process.env.DATABASE_URL!;
 
-// Neon requer esse parâmetro para compatibilidade SSL com node-postgres
+// Neon requer este parâmetro de compatibilidade SSL com node-postgres
 if (!connectionString.includes("uselibpqcompat")) {
   connectionString += connectionString.includes("?") ? "&" : "?";
   connectionString += "uselibpqcompat=true";
@@ -462,7 +462,6 @@ if (!global.__drizzlePool) {
 }
 
 export const db = drizzle(pool, { schema });
-export type DrizzleDB = typeof db;
 ```
 
 **Pontos não óbvios:**
@@ -470,7 +469,7 @@ export type DrizzleDB = typeof db;
 - `global.__drizzlePool ?? new Pool(...)` → se já existe um pool (hot-reload), reutiliza. Senão, cria.
 - `uselibpqcompat=true` → o Neon usa um proxy SSL específico. Sem esse parâmetro, o `node-postgres` pode apresentar erros de SSL.
 - `max: 5` → máximo de 5 conexões simultâneas. O Neon free tier suporta até 10.
-- `export type DrizzleDB = typeof db` → exporta o tipo da instância para injeção de dependência nos repositórios.
+- Não exportamos um tipo `DrizzleDB` compartilhado aqui — cada repositório declara localmente `type DB = NodePgDatabase<typeof schema>` (ver Passo 9). Evita acoplar a assinatura de todos os repositórios a um único ponto de export.
 
 ---
 
@@ -603,7 +602,7 @@ mkdir -p src/app/actions/auth
 mkdir -p src/app/api/auth/'[...all]'
 mkdir -p src/app/\(auth\)/login
 mkdir -p src/app/\(auth\)/register
-mkdir -p src/app/\(app\)/prospeccao
+mkdir -p src/app/\(protected\)/prospeccao
 mkdir -p src/lib
 ```
 
@@ -639,22 +638,22 @@ Crie `src/infrastructure/repositories/DrizzleCompanyRepository.ts`:
 
 ```typescript
 import { eq } from "drizzle-orm";
-import { type DrizzleDB } from "@/infrastructure/db";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+
 import { companiesTable, companyMembersTable } from "@/infrastructure/db/schema";
 import type { ICompanyRepository } from "@/domain/repositories/ICompanyRepository";
+import type * as schema from "@/infrastructure/db/schema";
+
+type DB = NodePgDatabase<typeof schema>;
 
 export class DrizzleCompanyRepository implements ICompanyRepository {
-  constructor(private db: DrizzleDB) {}
+  constructor(private db: DB) {}
 
   async create(data: { name: string; slug: string; ownerId: string }) {
     return await this.db.transaction(async (tx) => {
       const [company] = await tx
         .insert(companiesTable)
-        .values({
-          name: data.name,
-          slug: data.slug,
-          ownerId: data.ownerId,
-        })
+        .values({ name: data.name, slug: data.slug, ownerId: data.ownerId })
         .returning({ id: companiesTable.id, name: companiesTable.name, slug: companiesTable.slug });
 
       await tx.insert(companyMembersTable).values({
@@ -686,7 +685,7 @@ export class DrizzleCompanyRepository implements ICompanyRepository {
 
 **Pontos importantes:**
 - `implements ICompanyRepository` → TypeScript garante que todos os métodos da interface estão implementados
-- `private db: DrizzleDB` → injeção de dependência. O `db` vem de fora, não é importado aqui.
+- `private db: DB` → injeção de dependência. O `db` vem de fora, não é importado aqui. `DB` é declarado localmente como `NodePgDatabase<typeof schema>` em vez de vir de um tipo compartilhado — cada repositório define seu próprio alias (mesmo padrão repetido nos repositórios da Fase 2).
 - `.returning({ id, name, slug })` → o Drizzle retorna só os campos que pedimos, já tipados
 - `result[0] ?? null` → `findFirst` no Drizzle com `.select()` retorna um array; pegamos o primeiro ou null
 
@@ -707,14 +706,13 @@ interface Input {
   companyName: string;
 }
 
-type Output = { ok: true } | { ok: false; error: string };
+type Result = { ok: true } | { ok: false; error: string };
 
 function slugify(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
@@ -722,47 +720,38 @@ function slugify(s: string): string {
 export class CreateUserWithCompany {
   constructor(private companyRepo: ICompanyRepository) {}
 
-  async execute(input: Input): Promise<Output> {
+  async execute({ name, email, password, companyName }: Input): Promise<Result> {
     try {
-      // 1. Criar usuário via Better Auth
-      const authResult = await auth.api.signUpEmail({
-        body: {
-          name: input.name,
-          email: input.email,
-          password: input.password,
-        },
+      // 1. Criar usuário via Better Auth (server-side)
+      const response = await auth.api.signUpEmail({
+        body: { name, email, password },
+        asResponse: true,
       });
 
-      if (!authResult?.user?.id) {
-        return { ok: false, error: "Falha ao criar usuário." };
+      if (!response.ok) {
+        const err = (await response.json()) as { message?: string };
+        return { ok: false, error: err.message ?? "Erro ao criar usuário" };
       }
 
-      const userId = authResult.user.id;
+      const data = (await response.json()) as { user: { id: string } };
+      const userId = data.user.id;
 
-      // 2. Gerar slug único
-      const slug = slugify(input.companyName);
+      // 2. Gerar slug da empresa
+      const slug = slugify(companyName);
 
-      // 3. Criar empresa + membro em transação (via repositório)
-      await this.companyRepo.create({
-        name: input.companyName,
-        slug,
-        ownerId: userId,
-      });
+      // 3. Criar empresa + membro em transação
+      await this.companyRepo.create({ name: companyName, slug, ownerId: userId });
 
       return { ok: true };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro desconhecido.";
-
-      // Email duplicado é o erro mais comum — trata de forma amigável
-      if (message.toLowerCase().includes("unique") || message.toLowerCase().includes("duplicate")) {
-        return { ok: false, error: "Este e-mail já está cadastrado." };
-      }
-
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erro inesperado";
       return { ok: false, error: message };
     }
   }
 }
 ```
+
+**Por que `asResponse: true`?** Chamar `auth.api.signUpEmail` de dentro de uma Server Action com esse parâmetro é o que permite ao plugin `nextCookies()` (configurado no Passo 11) interceptar o `Set-Cookie` da resposta e aplicá-lo via `next/headers` — a sessão já fica ativa assim que o cadastro termina, sem precisar de uma chamada extra do client SDK. Esse mesmo mecanismo é reaproveitado no Server Action de login (ver "Login e registro" mais abaixo).
 
 **Por que o use case importa `auth` diretamente?**
 O Better Auth é a fronteira de autenticação do sistema — ele gera o usuário, a sessão e o token. Não faz sentido abstrair isso em um repositório porque não vamos trocar de biblioteca de auth sem reescrever essa camada inteira de qualquer forma. A criação de empresa via `ICompanyRepository`, sim, abstraímos porque o banco pode mudar.
@@ -777,6 +766,7 @@ Crie `src/lib/auth.ts`:
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
+
 import { db } from "@/infrastructure/db";
 import * as schema from "@/infrastructure/db/schema";
 
@@ -784,31 +774,33 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
     usePlural: false,
-    schema: {
-      user: schema.usersTable,
-      session: schema.sessionsTable,
-      account: schema.accountsTable,
-      verification: schema.verificationsTable,
-    },
+    schema,
   }),
   baseURL: process.env.BETTER_AUTH_URL,
-  secret: process.env.BETTER_AUTH_SECRET,
   emailAndPassword: {
     enabled: true,
     password: {
       hash: async (password: string) => {
         const bcrypt = await import("bcryptjs");
-        return bcrypt.hash(password, 10);
+        return await bcrypt.hash(password, 10);
       },
       verify: async ({ password, hash }: { password: string; hash: string }) => {
         const bcrypt = await import("bcryptjs");
-        return bcrypt.compare(password, hash);
+        return await bcrypt.compare(password, hash);
       },
     },
   },
-  plugins: [nextCookies()], // ← OBRIGATÓRIO para Server Actions setarem cookies
+  user: { modelName: "usersTable" },
+  session: { modelName: "sessionsTable" },
+  account: { modelName: "accountsTable" },
+  verification: { modelName: "verificationsTable" },
+  plugins: [nextCookies()],
 });
 ```
+
+**Por que `schema` inteiro em vez de mapear campo a campo?** O módulo `schema.ts` só tem uma tabela chamada `users`, `sessions`, `accounts` e `verifications` no sentido que o Better Auth espera — passar o módulo inteiro deixa o `drizzleAdapter` descobrir sozinho. O nome real de cada tabela (`usersTable`, não `users`) é informado à parte, via `user: { modelName: "usersTable" }` etc.
+
+**Por que não passamos `secret` explicitamente?** O Better Auth lê `BETTER_AUTH_SECRET` do `process.env` sozinho quando a opção não é informada — não precisa repetir.
 
 **Por que `await import("bcryptjs")` em vez de import estático?**
 O `bcryptjs` é pesado. Importar dinamicamente dentro das funções de hash/verify significa que o módulo só é carregado quando realmente necessário (no login ou cadastro), não em cada request.
@@ -826,7 +818,7 @@ import { createAuthClient } from "better-auth/react";
 export const authClient = createAuthClient();
 ```
 
-Este arquivo é importado apenas em componentes `"use client"`. Nunca importe em Server Components ou actions.
+Este arquivo é importado apenas em componentes `"use client"`. Login e cadastro **não** o usam — ambos são Server Actions (ver "Login e registro" mais abaixo). Ele só entra em cena mais adiante, no botão de logout da Sidebar (`authClient.signOut()`), a única operação de auth que ainda faz sentido disparar direto do client.
 
 ---
 
@@ -835,11 +827,13 @@ Este arquivo é importado apenas em componentes `"use client"`. Nunca importe em
 Crie `src/lib/tenant.ts`:
 
 ```typescript
+import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+
 import { db } from "@/infrastructure/db";
-import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
+import { companiesTable, companyMembersTable } from "@/infrastructure/db/schema";
+import { auth } from "@/lib/auth";
 
 export async function requireUser() {
   const session = await auth.api.getSession({
@@ -854,18 +848,30 @@ export async function requireUser() {
 }
 
 export async function requireCompany(userId: string) {
-  const companyRepo = new DrizzleCompanyRepository(db);
-  const company = await companyRepo.findByUserId(userId);
+  const result = await db
+    .select({
+      id: companiesTable.id,
+      name: companiesTable.name,
+      slug: companiesTable.slug,
+    })
+    .from(companyMembersTable)
+    .innerJoin(companiesTable, eq(companyMembersTable.companyId, companiesTable.id))
+    .where(eq(companyMembersTable.userId, userId))
+    .limit(1);
 
-  return {
-    companyId: company?.id ?? null,
-    company,
-  };
+  if (!result[0]) {
+    redirect("/login");
+  }
+
+  return { companyId: result[0].id, company: result[0] };
 }
 ```
 
 **Por que `requireUser` chama `redirect()` e não retorna null?**
-O `redirect()` do Next.js lança uma exceção especial que aborta a execução do Server Component e envia o cabeçalho HTTP 307. Isso garante que o código depois de `requireUser()` nunca executa se o usuário não estiver autenticado — sem precisar de `if (!user) return` em todo lugar.
+O `redirect()` do Next.js lança uma exceção especial que aborta a execução do Server Component e envia o cabeçalho HTTP 307. Isso garante que o código depois de `requireUser()` nunca executa se o usuário não estiver autenticado — sem precisar de `if (!user) return` em todo lugar. `requireCompany()` segue a mesma lógica: se não achar empresa vinculada, redireciona em vez de devolver `company: null` — assim nenhuma página protegida precisa tratar o caso "usuário sem empresa".
+
+**Por que `requireCompany` faz a query direto em vez de passar por `DrizzleCompanyRepository`?**
+`tenant.ts` é um helper de infraestrutura cross-cutting, chamado em praticamente toda página protegida — não é lógica de negócio, é resolução de sessão/tenant. Passar por um repositório aqui não traria nenhum ganho de Clean Architecture (não existe uma regra de negócio pra isolar, nem um "use case" fazendo essa chamada) — só adicionaria uma camada de indireção sem propósito. `ICompanyRepository`/`DrizzleCompanyRepository` continuam existindo e são usados de verdade no use case de cadastro (`CreateUserWithCompany`, Passo 10), que é onde a regra de negócio (criar empresa + membro em transação) de fato mora.
 
 ---
 
@@ -896,25 +902,39 @@ Crie `src/app/actions/auth/signup.ts`:
 ```typescript
 "use server";
 
+import { z } from "zod";
+
 import { db } from "@/infrastructure/db";
 import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
 import { CreateUserWithCompany } from "@/use-cases/auth/CreateUserWithCompany";
 
-interface SignupInput {
+const signupSchema = z.object({
+  name: z.string().min(2, "Nome deve ter ao menos 2 caracteres"),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(8, "Senha deve ter ao menos 8 caracteres"),
+  companyName: z.string().min(2, "Nome da empresa deve ter ao menos 2 caracteres"),
+});
+
+export async function signup(formData: {
   name: string;
   email: string;
   password: string;
   companyName: string;
-}
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const parsed = signupSchema.safeParse(formData);
 
-export async function signupAction(input: SignupInput) {
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message };
+  }
+
   const companyRepo = new DrizzleCompanyRepository(db);
   const useCase = new CreateUserWithCompany(companyRepo);
-  return useCase.execute(input);
+
+  return useCase.execute(parsed.data);
 }
 ```
 
-Repare como a action é fina: instancia as dependências concretas, passa para o use case, retorna o resultado. Nenhuma lógica de negócio aqui.
+Repare como a action é fina: valida o input com Zod, instancia as dependências concretas, passa para o use case, retorna o resultado. Nenhuma lógica de negócio aqui — a validação de formato fica na action (é responsabilidade do controller), as regras de negócio ficam no use case.
 
 ---
 
@@ -922,23 +942,27 @@ Repare como a action é fina: instancia as dependências concretas, passa para o
 
 > **⚠️ Mudança importante do Next.js 16:** o arquivo `middleware.ts` foi renomeado para `proxy.ts` e a função exportada de `middleware` para `proxy`. Se você usar o nome antigo, o Next.js 16 ignora silenciosamente o arquivo — suas rotas ficam desprotegidas sem nenhum erro.
 
-Crie `proxy.ts` na **raiz do projeto** (ao lado de `src/`, não dentro):
+Crie `src/proxy.ts` (dentro de `src/`, ao lado de `app/`):
 
 ```typescript
-import { NextRequest, NextResponse } from "next/server";
-import { getSessionCookie } from "better-auth/cookies";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+
+const publicPaths = ["/login", "/register"];
+const authApiPrefix = "/api/auth";
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Libera rotas públicas e API do Better Auth
-  const PUBLIC_PATHS = ["/login", "/register", "/api/auth"];
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  if (publicPaths.includes(pathname) || pathname.startsWith(authApiPrefix)) {
     return NextResponse.next();
   }
 
-  // Verifica presença do cookie (check rápido, sem banco)
-  const sessionCookie = getSessionCookie(request);
+  // Presença do cookie verificada aqui; validade real checada pelo requireUser() nos Server Components
+  const sessionCookie =
+    request.cookies.get("better-auth.session_token") ??
+    request.cookies.get("__Secure-better-auth.session_token");
+
   if (!sessionCookie) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
@@ -947,19 +971,21 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };
 ```
 
-**Por que `getSessionCookie` e não `auth.api.getSession`?**
+**Por que checar o cookie na mão em vez de `getSessionCookie` do Better Auth?**
 
-O Next.js 16 suporta Node.js runtime no proxy, então *daria* para chamar `auth.api.getSession()` aqui e validar a sessão de verdade. Mas não fazemos isso por uma razão importante: o proxy roda em **toda requisição**, incluindo arquivos estáticos, fontes e imagens. Validar a sessão no banco a cada request de imagem é desperdício.
+O Next.js 16 suporta Node.js runtime no proxy, então *daria* para chamar `auth.api.getSession()` aqui e validar a sessão de verdade. Mas não fazemos isso por uma razão importante: o proxy roda em **toda requisição**, incluindo arquivos estáticos, fontes e imagens. Validar a sessão no banco a cada request de imagem é desperdício — por isso o check aqui é só "esse cookie existe?", nunca "esse cookie é válido?".
 
 A estratégia correta é em duas camadas:
-- **`proxy.ts`** → check rápido de cookie (UX: evita renderizar página antes de redirecionar)
+- **`proxy.ts`** → check rápido de presença do cookie (UX: evita renderizar página antes de redirecionar)
 - **`requireUser()` no layout/página** → validação real da sessão no banco (segurança)
 
-**Security warning da doc oficial do Better Auth:** `getSessionCookie` não valida o cookie, apenas verifica se existe. Por isso o `requireUser()` nas páginas é obrigatório — ele é a camada de segurança real.
+**Por que o matcher exclui qualquer path com ponto (`.*\\..*`)?** Além das pastas internas do Next.js (`_next/static`, `_next/image`) e do favicon, qualquer arquivo estático servido da pasta `public/` (imagens, fontes, etc.) tem extensão no nome — o padrão evita rodar a checagem de sessão nesses assets.
+
+**Importante:** o cookie só prova que existe uma sessão — nunca que ela é válida. Por isso o `requireUser()` nas páginas continua obrigatório: é a camada de segurança real.
 
 ---
 
@@ -969,32 +995,163 @@ Crie `src/app/layout.tsx`:
 
 ```tsx
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
-const geist = Geist({ subsets: ["latin"] });
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   title: "ProspFlow",
-  description: "Prospecção ativa para agências digitais",
+  description: "Prospecção ativa e gestão comercial para agências",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="pt-BR">
-      <body className={geist.className}>{children}</body>
+    <html
+      lang="pt-BR"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full">
+        {children}
+        <Toaster position="top-right" richColors />
+      </body>
     </html>
   );
 }
 ```
 
+`<Toaster>` já entra aqui, na Fase 1 — não é preciso adicioná-lo de novo na Fase 2 (o Task 1 daquele documento menciona isso, mas já vem pronto desde este passo).
+
 Crie `src/app/(auth)/layout.tsx`:
 
+> Layout de duas colunas: painel esquerdo com marca/tagline/features (só desktop), painel direito com o formulário — `{children}` recebe `LoginForm`/`RegisterForm` dentro de um card.
+
 ```tsx
+import { BarChart2, Crosshair, MapPin, Shield, Sparkles } from "lucide-react";
+
+const features = [
+  {
+    icon: MapPin,
+    title: "Busca geolocalizada de leads",
+    description: "Encontre empresas por nicho e localização em segundos via mapa interativo.",
+  },
+  {
+    icon: Sparkles,
+    title: "Diagnóstico e mensagem com IA",
+    description: "Gere análises do negócio e mensagens personalizadas automaticamente.",
+  },
+  {
+    icon: BarChart2,
+    title: "Funil comercial completo",
+    description: "Acompanhe cada lead do primeiro contato até o fechamento.",
+  },
+  {
+    icon: Shield,
+    title: "Multi-agências com isolamento",
+    description: "Gerencie múltiplos clientes com dados 100% separados e seguros.",
+  },
+];
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      {children}
+    <div className="flex min-h-screen lg:h-screen">
+      {/* ── Painel esquerdo — brand (50%) ──────────────────────────── */}
+      <div className="relative hidden overflow-hidden bg-primary lg:flex lg:w-1/2">
+        {/* Decorative blobs */}
+        <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/[0.05]" />
+        <div className="absolute -bottom-40 -left-20 h-[480px] w-[480px] rounded-full bg-white/[0.05]" />
+        <div className="absolute bottom-32 right-10 h-52 w-52 rounded-full bg-white/[0.05]" />
+
+        <div className="relative flex flex-1 flex-col p-12 xl:p-16">
+          {/* Logo */}
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20">
+              <Crosshair className="h-[15px] w-[15px] text-white" strokeWidth={2.5} />
+            </div>
+            <span className="text-[15px] font-semibold tracking-tight text-white">ProspFlow</span>
+          </div>
+
+          {/* Tagline */}
+          <div className="mt-12">
+            <h2 className="text-[2.2rem] font-bold leading-[1.15] tracking-tight text-white xl:text-[2.6rem]">
+              Prospecte mais,
+              <br />
+              feche mais.
+            </h2>
+            <p className="mt-4 max-w-sm text-[14px] leading-relaxed text-white/65 xl:text-[15px]">
+              O sistema de prospecção ativa para agências de marketing digital que querem crescer
+              sem depender de indicações.
+            </p>
+
+            {/* Features */}
+            <ul className="mt-10 space-y-5">
+              {features.map(({ icon: Icon, title, description }) => (
+                <li key={title} className="flex items-start gap-3.5">
+                  <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/15">
+                    <Icon className="h-3 w-3 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-medium text-white">{title}</p>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-white/55">
+                      {description}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Footer */}
+          <p className="mt-12 text-[11px] text-white/35">
+            © 2025 ProspFlow · Todos os direitos reservados
+          </p>
+        </div>
+      </div>
+
+      {/* ── Painel direito — form (50%) ─────────────────────────────── */}
+      <div className="flex flex-1 flex-col lg:w-1/2 lg:flex-none">
+        {/* Dot-grid background */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 hidden lg:block lg:w-1/2"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle, oklch(0.511 0.243 264 / 0.06) 1px, transparent 1px)",
+            backgroundSize: "24px 24px",
+          }}
+        />
+
+        {/* Mobile header */}
+        <div className="flex h-14 items-center gap-2.5 border-b border-border px-6 lg:hidden">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+            <Crosshair className="h-[13px] w-[13px] text-primary-foreground" strokeWidth={2.5} />
+          </div>
+          <span className="text-[13px] font-semibold tracking-tight text-foreground">
+            ProspFlow
+          </span>
+        </div>
+
+        {/* Form area */}
+        <div className="relative flex flex-1 items-center justify-center p-8">
+          {/* Card container */}
+          <div className="w-full max-w-[400px] rounded-2xl border border-border bg-card p-8 shadow-sm">
+            {children}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1331,17 +1488,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 }
 ```
 
-Crie `src/app/page.tsx` (raiz — redireciona para /login):
+Crie `src/app/page.tsx` (raiz — redireciona para /prospeccao):
 
 ```tsx
 import { redirect } from "next/navigation";
 
-export default function RootPage() {
-  redirect("/login");
+export default function Home() {
+  redirect("/prospeccao");
 }
 ```
 
-**Por que isso existe?** Sem esse arquivo, acessar `/` retorna 404. Com ele, qualquer acesso à raiz vai para `/login`, que o proxy já trata de redirecionar para `/prospeccao` se o usuário estiver logado.
+**Por que isso existe?** Sem esse arquivo, acessar `/` retorna 404. Redirecionar direto pra `/prospeccao` (em vez de `/login`) é intencional: se o usuário não tiver sessão, o `requireUser()` do layout protegido já lança o redirect pra `/login` — não precisa duplicar essa decisão aqui na raiz.
 
 ---
 
