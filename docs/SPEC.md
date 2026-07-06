@@ -506,26 +506,57 @@ export const leadActivitiesTable = pgTable("lead_activities", {
 
 ## Integrações externas
 
+### ViaCEP + Nominatim (geocodificação do formulário de campanha)
+
+No formulário de criação de campanha, o usuário informa apenas o **CEP**. O sistema faz duas chamadas client-side para obter coordenadas automaticamente:
+
+1. **ViaCEP** (`https://viacep.com.br/ws/{cep}/json/`) → retorna `localidade` (cidade), `uf` (estado), `logradouro`
+2. **Nominatim/OpenStreetMap** (`https://nominatim.openstreetmap.org/search`) → converte o endereço em `latitude` e `longitude`
+
+Ambas as APIs são gratuitas e não requerem chave de API. Os campos cidade e estado são preenchidos automaticamente mas continuam editáveis. Lat/lon ficam visíveis como informação de confirmação (read-only) abaixo do campo CEP.
+
+```typescript
+// Fluxo no componente (client-side, onBlur do campo CEP)
+const viacepRes = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+const { localidade, uf, logradouro } = await viacepRes.json();
+
+const query = encodeURIComponent(`${logradouro || localidade}, ${localidade}, ${uf}, Brazil`);
+const nominatimRes = await fetch(
+  `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
+  { headers: { "Accept-Language": "pt-BR" } }
+);
+const [{ lat, lon }] = await nominatimRes.json();
+```
+
+---
+
 ### Overpass API (busca georreferenciada)
 
 Gratuito, sem chave de API. Endpoint: `https://overpass-api.de/api/interpreter`
 
-```typescript
-// src/infrastructure/services/OverpassGeoService.ts
-// Implementa IGeoService
+**Estratégia de query dupla:** as keywords do nicho são em português, mas o OSM taggeia negócios com `amenity` em inglês (ex: `restaurant`, não `restaurante`). A solução usa uma query combinada:
 
-function buildOverpassQuery(params: GeoSearchParams): string {
-  const keywords = params.keywords.join("|");
-  const radiusMeters = params.radiusKm * 1000;
-  return `
-    [out:json][timeout:25];
-    (
-      node["name"]["amenity"~"${keywords}"](around:${radiusMeters},${params.latitude},${params.longitude});
-      way["name"]["amenity"~"${keywords}"](around:${radiusMeters},${params.latitude},${params.longitude});
-    );
-    out body center ${params.maxResults};
-  `.trim();
-}
+1. **Amenity-based** (principal): busca por `amenity~"restaurant|fast_food|cafe|bar"` com `["name"]` obrigatório → encontra todos os restaurantes independente do nome do estabelecimento
+2. **Name-based** (fallback): busca `name~"restaurante|pizzaria",i` → pega estabelecimentos sem tag `amenity` mas com keyword no nome
+
+O mapeamento `KEYWORD_TO_AMENITY` em `OverpassGeoService.ts` converte keywords PT → amenity OSM para ~40 tipos de negócio. Novos mapeamentos podem ser adicionados sem alterar a interface `IGeoService`.
+
+**Headers obrigatórios no fetch server-side:** o Node.js fetch não envia `Accept: */*` por padrão (diferente do browser). O Apache/proxy da Overpass retorna 406 sem esse header. Sempre incluir:
+```
+Accept: application/json, text/plain, */*
+User-Agent: ProspFlow/1.0
+```
+
+```typescript
+// Query gerada para keywords ["restaurante", "pizzaria", "lanchonete"]
+[out:json][timeout:25];
+(
+  node["amenity"~"restaurant|fast_food"]["name"](around:5000,lat,lon);
+  way["amenity"~"restaurant|fast_food"]["name"](around:5000,lat,lon);
+  node["name"~"restaurante|pizzaria|lanchonete",i](around:5000,lat,lon);
+  way["name"~"restaurante|pizzaria|lanchonete",i](around:5000,lat,lon);
+);
+out body center;
 ```
 
 **Algoritmo de score (executado no use case `RunCampaign`, não na infra):**

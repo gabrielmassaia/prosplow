@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Crosshair, LogOut, Target } from "lucide-react";
+import { BarChart2, Crosshair, LogOut, Map, Tag, Users } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,12 @@ interface SidebarProps {
   company: { name: string };
 }
 
-const navItems = [{ href: "/prospeccao", label: "Prospecção", icon: Target }];
+const navItems = [
+  { href: "/prospeccao", label: "Dashboard", icon: BarChart2, exact: true },
+  { href: "/prospeccao/nichos", label: "Nichos", icon: Tag, exact: false },
+  { href: "/prospeccao/campanhas", label: "Campanhas", icon: Map, exact: false },
+  { href: "/prospeccao/leads", label: "Leads", icon: Users, exact: false },
+];
 
 function getInitials(name: string): string {
   return name
@@ -52,8 +57,10 @@ export function Sidebar({ user, company }: SidebarProps) {
         <p className="px-2 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
           Menu
         </p>
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
+        {navItems.map(({ href, label, icon: Icon, exact }) => {
+          const active = exact
+            ? pathname === href
+            : pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
               key={href}

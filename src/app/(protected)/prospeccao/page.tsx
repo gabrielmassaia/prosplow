@@ -1,34 +1,128 @@
-import { Target } from "lucide-react";
+import Link from "next/link";
+import { Map, Tag, TrendingUp, Users } from "lucide-react";
 
 import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
+import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
 
-export default async function ProspeccaoPage() {
+export default async function DashboardPage() {
   const user = await requireUser();
-  const { company } = await requireCompany(user.id);
+  const { companyId } = await requireCompany(user.id);
 
-  const firstName = user.name.split(" ")[0];
+  const nicheRepo = new DrizzleNicheRepository(db);
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const leadRepo = new DrizzleLeadRepository(db);
+
+  const [niches, campaigns, leadCounts] = await Promise.all([
+    nicheRepo.findAllByCompany(companyId),
+    campaignRepo.findAllByCompany(companyId),
+    leadRepo.countByCompany(companyId),
+  ]);
+
+  const activeNiches = niches.filter((n) => n.isActive).length;
+  const completedCampaigns = campaigns.filter((c) => c.status === "completed").length;
+  const recentCampaigns = [...campaigns].reverse().slice(0, 5);
+
+  const stats = [
+    {
+      label: "Nichos ativos",
+      value: activeNiches,
+      icon: Tag,
+      color: "text-primary bg-primary/10",
+      href: "/prospeccao/nichos",
+    },
+    {
+      label: "Campanhas concluídas",
+      value: completedCampaigns,
+      icon: Map,
+      color: "text-violet-600 bg-violet-50",
+      href: "/prospeccao/campanhas",
+    },
+    {
+      label: "Leads prospectados",
+      value: leadCounts.total,
+      icon: Users,
+      color: "text-amber-600 bg-amber-50",
+      href: "/prospeccao/leads",
+    },
+    {
+      label: "Qualificados (score 70+)",
+      value: leadCounts.qualified,
+      icon: TrendingUp,
+      color: "text-emerald-600 bg-emerald-50",
+      href: "/prospeccao/leads",
+    },
+  ];
 
   return (
     <div className="flex flex-1 flex-col p-8">
-      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-foreground">Prospecção</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Olá, {firstName}. Bem-vindo de volta à{" "}
-          <span className="font-medium text-foreground">{company.name}</span>.
-        </p>
+        <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Visão geral da prospecção ativa</p>
       </div>
 
-      {/* Empty state */}
-      <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 py-20">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-          <Target className="h-6 w-6 text-primary" />
-        </div>
-        <h2 className="mt-4 text-base font-semibold text-foreground">Nenhuma campanha ainda</h2>
-        <p className="mt-1.5 max-w-sm text-center text-sm text-muted-foreground">
-          Na Fase 2 vamos criar campanhas de prospecção com busca geolocalizada e geração de leads
-          automática via Cloudflare AI.
-        </p>
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {stats.map(({ label, value, icon: Icon, color, href }) => (
+          <Link key={label} href={href}>
+            <div className="flex items-center gap-4 rounded-xl border border-border bg-card p-5 transition-shadow hover:shadow-sm">
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${color}`}
+              >
+                <Icon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold tabular-nums text-foreground">{value}</p>
+                <p className="text-xs text-muted-foreground">{label}</p>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Campanhas recentes */}
+      <div className="mt-8">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Campanhas recentes
+        </h2>
+        {recentCampaigns.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
+            <p className="text-sm text-muted-foreground">Nenhuma campanha criada ainda.</p>
+            <Link
+              href="/prospeccao/campanhas"
+              className="mt-3 inline-block text-sm text-primary hover:text-primary/75"
+            >
+              Criar primeira campanha →
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {recentCampaigns.map((c) => (
+              <Link key={c.id} href={`/prospeccao/campanhas/${c.id}`}>
+                <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/40">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{c.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {c.city}, {c.state}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium tabular-nums text-foreground">
+                      {c.totalFound} leads
+                    </span>
+                    <Badge className={CAMPAIGN_STATUS_CLASSES[c.status]}>
+                      {CAMPAIGN_STATUS_LABEL[c.status]}
+                    </Badge>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
