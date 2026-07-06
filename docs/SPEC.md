@@ -4,6 +4,8 @@
 > Este é o documento-mestre do projeto. O agente deve **ler o SPEC inteiro antes de começar**
 > para entender o contexto global, mas deve **executar apenas a fase indicada** na sessão atual.
 >
+> Instruções para AI AGENT - CLAUDE.MD e AGENTS.md
+> Obrigatória a documentação em /phases no padrão de C:\projects\aivonlabs\prospflow\phases\FASE_1_setup-base.md.
 > Referências de UI estão em `/docs/ui-lovable/` (projeto Lovable exportado).
 > Referências de componentes e tipos estão em `/docs/DOC_*.md`.
 > Guia de setup base está em `/docs/setup-next16-better-auth-neon.md`.

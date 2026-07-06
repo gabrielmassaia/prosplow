@@ -379,6 +379,12 @@ npx better-auth secret
 # Cole o valor gerado no .env.local
 ```
 
+> **Se o comando acima falhar** (`npm error could not determine executable to run`), use a alternativa com Node.js nativo:
+> ```bash
+> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+> ```
+> Isso gera 32 bytes aleatórios em hex — exatamente o que o Better Auth espera.
+
 Crie também `.env.local.example` (sem valores reais — vai para o git):
 ```env
 DATABASE_URL=
@@ -1226,9 +1232,9 @@ Acesse `http://localhost:3000/register` e crie uma conta. Depois verifique no pa
 
 ### Armadilha 0 — Rotas não estão sendo protegidas (proxy ignorado silenciosamente)
 
-**Sintoma:** Acessar `/prospeccao` sem sessão não redireciona para `/login`.
-**Causa:** O arquivo foi criado como `middleware.ts` em vez de `proxy.ts`, ou a função foi exportada como `middleware` em vez de `proxy`. O Next.js 16 ignora silenciosamente nomes errados.
-**Solução:** Verificar que o arquivo se chama `proxy.ts` (na raiz, ao lado de `src/`) e que exporta `export function proxy(request: NextRequest)`.
+**Sintoma:** Ao iniciar o servidor, aparece o erro: `The file "./src\proxy.ts" must export a function, either as a default export or as a named "proxy" export.`
+**Causa:** O Next.js 16 renomeou `middleware.ts` → `proxy.ts`, e a função exportada deve se chamar `proxy` (não `middleware`). Se você exportar `export function middleware(...)`, o servidor sobe mas lança esse erro em cada request.
+**Solução:** No arquivo `src/proxy.ts`, use `export function proxy(request: NextRequest)`. O `export const config` com o `matcher` continua igual.
 
 ### Armadilha 1 — Erro de SSL ao conectar no Neon
 
@@ -1267,11 +1273,120 @@ Acesse `http://localhost:3000/register` e crie uma conta. Depois verifique no pa
 
 ---
 
+## Passo extra — Prettier com plugin do Tailwind
+
+### Por que Prettier + plugin?
+
+O Prettier formata o código automaticamente no save. O plugin `prettier-plugin-tailwindcss` vai além: ele **ordena as classes Tailwind** na sequência oficial do framework (layout → spacing → typography → etc.), evitando divergência entre desenvolvedores e tornando os diffs mais limpos.
+
+### Instalação
+
+```bash
+npm install -D prettier prettier-plugin-tailwindcss
+```
+
+### Configuração — `.prettierrc` (raiz do projeto)
+
+```json
+{
+  "semi": true,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 100,
+  "plugins": ["prettier-plugin-tailwindcss"]
+}
+```
+
+| Opção | Valor | Por quê |
+|---|---|---|
+| `semi` | `true` | Ponto e vírgula obrigatório — sem ambiguidade |
+| `singleQuote` | `false` | Aspas duplas — padrão JSX |
+| `tabWidth` | `2` | Indentação padrão JS/TS |
+| `trailingComma` | `"es5"` | Trailing comma em arrays e objetos — diffs menores |
+| `printWidth` | `100` | Mais espaço que o padrão de 80; adequado para TypeScript verboso |
+| `plugins` | `tailwindcss` | Ordena classes Tailwind automaticamente |
+
+### Integração com VS Code (opcional, mas recomendado)
+
+Instale a extensão **Prettier - Code formatter** e adicione ao `.vscode/settings.json`:
+
+```json
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true
+}
+```
+
+### Rodar manualmente
+
+```bash
+# Formatar todos os arquivos do projeto
+npx prettier --write .
+
+# Verificar sem aplicar (útil em CI)
+npx prettier --check .
+```
+
+---
+
+## Passo extra — Sistema de Design e Sidebar
+
+### Design tokens no `globals.css`
+
+O ProspFlow usa **indigo como cor primária de marca** (`oklch(0.511 0.243 264)` ≈ `#4F46E5`). Todos os neutrals têm um leve viés violeta — cinzas "escolhidos", não herdados do padrão.
+
+O sistema de tokens sobrescreve os defaults cinzas do shadcn/ui e garante consistência em todos os componentes:
+
+```
+--primary        → indigo brand (botões, links, foco, ring)
+--sidebar        → surface levemente tintada de indigo
+--sidebar-primary → indigo (item ativo na nav)
+--muted-foreground → slate com leve violeta (labels, metadados)
+```
+
+Cada token tem equivalente para `.dark`, com background `oklch(0.118 0.016 264)` (preto com azul-violeta — mais sofisticado que preto puro).
+
+### Sidebar — `src/components/layout/Sidebar.tsx`
+
+Client Component com três zonas:
+
+1. **Logo**: ícone `Crosshair` em caixa indigo + wordmark
+2. **Nav**: links com estado ativo via `usePathname()`, classes condicionadas com `cn()`
+3. **User**: avatar com iniciais (max 2 letras), nome + empresa, botão de logout
+
+```
+getInitials("João Silva") → "JS"
+getInitials("Maria")      → "M"
+```
+
+O logout chama `authClient.signOut()` e depois `router.push("/login")`.
+
+### Layout protegido — `src/app/(protected)/layout.tsx`
+
+O layout vira Server Component async: busca `user` e `company` via `requireUser()` → `requireCompany()`, e passa para o `<Sidebar>` como props.
+
+```tsx
+export default async function AppLayout({ children }) {
+  const user = await requireUser();
+  const { company } = await requireCompany(user.id);
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar user={...} company={...} />
+      <main className="flex flex-1 flex-col overflow-y-auto">{children}</main>
+    </div>
+  );
+}
+```
+
+A separação Server / Client é intencional: o layout busca os dados (Server), a sidebar reage ao pathname e dispara logout (Client). Dados fluem de cima para baixo — nunca o contrário.
+
+---
+
 ## Próximos passos — Fase 2
 
 Na próxima fase vamos construir o módulo de prospecção completo:
 
-- AppLayout com sidebar (navegação, avatar, nome da empresa)
 - Dashboard com métricas (cards de nichos, campanhas, leads)
 - CRUD de nichos com TagInput e geração por Cloudflare AI
 - Lista de campanhas com execução real via Overpass API

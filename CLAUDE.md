@@ -151,6 +151,7 @@ Sempre atualizar `.env.local.example` ao adicionar nova variável.
 
 ## O que NÃO fazer
 
+- **Nunca fazer `git commit` automaticamente.** O desenvolvedor faz commits manualmente.
 - Não iniciar implementação de uma fase sem ler o SPEC e os DOCs correspondentes
 - Não criar tabelas sem adicionar ao `schema.ts` e rodar `drizzle-kit push`
 - Não esquecer de criar o arquivo `phases/FASE_[N].md` ao final
