@@ -1394,4 +1394,15 @@ Na próxima fase vamos construir o módulo de prospecção completo:
 - Lista de leads com filtros, paginação, mapa e sheet de detalhes
 - Diagnóstico e mensagem WhatsApp gerados por Cloudflare AI
 
-Antes de começar a Fase 2: instale as variáveis `CLOUDFLARE_ACCOUNT_ID` e `CLOUDFLARE_AI_TOKEN` no `.env.local`.
+Antes de começar a Fase 2, adicione as variáveis Cloudflare no `.env.local`:
+
+```env
+CLOUDFLARE_ACCOUNT_ID=seu_account_id
+CLOUDFLARE_AI_TOKEN=seu_api_token
+CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.1-70b-instruct
+```
+
+**Onde pegar:**
+- `CLOUDFLARE_ACCOUNT_ID` — [dash.cloudflare.com](https://dash.cloudflare.com) → barra lateral → Account ID
+- `CLOUDFLARE_AI_TOKEN` — **My Profile → API Tokens → Create Token → template "Workers AI"**
+- `CLOUDFLARE_AI_MODEL` — modelo fixado no env para facilitar troca sem mexer no código. `llama-3.1-70b-instruct` é o mais capaz do Workers AI sem custo adicional e tem bom suporte a português.
