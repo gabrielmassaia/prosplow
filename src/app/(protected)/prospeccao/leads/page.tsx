@@ -24,6 +24,12 @@ export default function LeadsPage() {
 }
 
 async function LeadsDataLoader() {
-  const { leads, campaigns } = await getLeadsBootstrapAction();
-  return <LeadsContent initialLeads={leads} initialCampaigns={campaigns} />;
+  const { leads, campaigns, convertedProspectingLeadIds } = await getLeadsBootstrapAction();
+  return (
+    <LeadsContent
+      initialLeads={leads}
+      initialCampaigns={campaigns}
+      initialConvertedProspectingLeadIds={convertedProspectingLeadIds}
+    />
+  );
 }
