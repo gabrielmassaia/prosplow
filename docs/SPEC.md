@@ -807,13 +807,13 @@ npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
 **Objetivo:** Preparar para deploy real.
 
 **Escopo:**
-- Seletor de empresa (troca cookie `active_company_id`)
-- `SeedFunnelStages` disparado automaticamente no primeiro login de uma empresa nova
-- `generateMetadata()` em todas as páginas
-- `error.tsx` e `not-found.tsx` globais
-- Middleware com validação real de sessão (não só presença de cookie)
-- Rate limiting nas server actions que chamam Cloudflare AI
-- Convite de membros por email (Better Auth + email provider)
+- `SeedFunnelStages` disparado automaticamente no primeiro login de uma empresa nova (hoje roda lazy dentro de `getFunilBootstrapAction` — mover o gatilho para um hook de sign-up/sign-in do Better Auth)
+- `generateMetadata()` nas páginas que ainda não têm (hoje falta em `(protected)/prospeccao/page.tsx`, o dashboard)
+- `error.tsx` e `not-found.tsx` globais (nenhum existe hoje em `src/app/`)
+- Middleware com validação real de sessão, não só presença de cookie (`src/proxy.ts` hoje só verifica se o cookie existe; a validade é checada depois, em `requireUser()`)
+- Rate limiting nas server actions que chamam Cloudflare AI (`generate-diagnosis.ts`, `generate-message.ts` não têm nenhum hoje)
+
+**Fora de escopo desta versão** (não serão implementados nas lives): seletor de empresa e convite de membros por email — dependem um do outro (trocar de empresa só faz sentido se um usuário puder pertencer a mais de uma, o que exigiria o fluxo de convite) e este produto, como construído na série de lives, mantém uma empresa por usuário. O schema já suporta `company_role` (`owner`/`member`) para o caso de essa decisão mudar no futuro, mas nenhum código hoje usa o valor `member`.
 
 ---
 

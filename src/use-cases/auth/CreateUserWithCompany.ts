@@ -1,5 +1,7 @@
 import { auth } from "@/lib/auth";
 import type { ICompanyRepository } from "@/domain/repositories/ICompanyRepository";
+import type { IFunnelStageRepository } from "@/domain/repositories/IFunnelStageRepository";
+import { SeedFunnelStages } from "@/use-cases/funil/SeedFunnelStages";
 
 interface Input {
   name: string;
@@ -20,7 +22,10 @@ function slugify(s: string): string {
 }
 
 export class CreateUserWithCompany {
-  constructor(private companyRepo: ICompanyRepository) {}
+  constructor(
+    private companyRepo: ICompanyRepository,
+    private stageRepo: IFunnelStageRepository
+  ) {}
 
   async execute({ name, email, password, companyName }: Input): Promise<Result> {
     try {
@@ -42,7 +47,11 @@ export class CreateUserWithCompany {
       const slug = slugify(companyName);
 
       // 3. Criar empresa + membro em transação
-      await this.companyRepo.create({ name: companyName, slug, ownerId: userId });
+      const company = await this.companyRepo.create({ name: companyName, slug, ownerId: userId });
+
+      // 4. Seed das etapas padrão do funil (falha aqui não deve impedir o cadastro —
+      // o bootstrap do funil também seeda de forma lazy como segunda camada de proteção)
+      await new SeedFunnelStages(this.stageRepo).execute({ companyId: company.id });
 
       return { ok: true };
     } catch (e: unknown) {

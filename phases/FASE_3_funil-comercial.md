@@ -356,4 +356,4 @@ A Fase 4 do SPEC menciona seed automático no primeiro login — isso pressupõe
 
 ## Próximos passos — Fase 4
 
-Conforme o SPEC: seletor de empresa multi-tenant, `SeedFunnelStages` disparado automaticamente no primeiro login (substituindo/complementando o seed lazy desta fase), `generateMetadata()` em todas as páginas, `error.tsx`/`not-found.tsx` globais, validação real de sessão no middleware, rate limiting nas Server Actions que chamam Cloudflare AI, e convite de membros por e-mail.
+Conforme o SPEC (revisado após a Fase 3): `SeedFunnelStages` disparado automaticamente no primeiro login (substituindo/complementando o seed lazy desta fase), `generateMetadata()` nas páginas que ainda faltam (dashboard), `error.tsx`/`not-found.tsx` globais, validação real de sessão no middleware, e rate limiting nas Server Actions que chamam Cloudflare AI. Seletor de empresa e convite de membros por e-mail ficaram fora do escopo desta versão — dependem um do outro e o produto, como construído nas lives, mantém uma empresa por usuário.
