@@ -803,18 +803,14 @@ export class OverpassGeoService implements IGeoService {
         lines.push(`  way["${key}"~"${regex}"](${around});`);
       }
     } else if (keywords.length > 0) {
-      // Fallback por nome: só ativo quando a IA não gerou tags
-      // (evita scan de todos os nomes da área quando desnecessário)
+      // Fallback por nome: só ativo quando a IA não gerou tags (evita scan de todos os nomes da área)
       const nameRegex = keywords.join("|");
       lines.push(`  node["name"~"${nameRegex}",i](${around});`);
       lines.push(`  way["name"~"${nameRegex}",i](${around});`);
     }
 
-    // `out tags center qt 200`:
-    //   tags  = apenas tags + coords (sem coordenadas dos nós-membro de ways) — muito mais leve
-    //   center = calcula centro geométrico para ways
-    //   qt    = sem ordenação de resultado (mais rápido)
-    //   200   = limite Overpass; slice(0, maxResults) aplicado depois do filtro por nome
+    // `tags center qt`: apenas tags + centro de ways (sem coordenadas de membros) + sem ordenação
+    // Muito mais leve que `body center` para respostas com muitos ways
     lines.push(");", "out tags center qt 200;");
     const query = lines.join("\n");
 
@@ -880,7 +876,7 @@ export class OverpassGeoService implements IGeoService {
         withName.slice(0, 3).map((el) => ({ name: el.tags?.name, amenity: el.tags?.amenity, shop: el.tags?.shop }))
       );
 
-      // Limite aplicado depois do filtro por nome — nunca antes
+      // Limite aplicado aqui, depois de filtrar por nome
       return withName.slice(0, params.maxResults).map((el) => {
         const elLat = el.lat ?? el.center?.lat ?? 0;
         const elLon = el.lon ?? el.center?.lon ?? 0;
@@ -1108,15 +1104,18 @@ export class DeleteNiche {
 - [ ] **Step 1: Criar `src/use-cases/campanhas/CreateCampaign.ts`**
 
 ```typescript
-import type { Campaign, CreateCampaignData, ICampaignRepository } from "@/domain/repositories/ICampaignRepository";
+import type {
+  Campaign,
+  CreateCampaignData,
+  ICampaignRepository,
+} from "@/domain/repositories/ICampaignRepository";
 
-type Input = CreateCampaignData;
 type Result = { ok: true; data: Campaign } | { ok: false; error: string };
 
 export class CreateCampaign {
   constructor(private campaignRepo: ICampaignRepository) {}
 
-  async execute(input: Input): Promise<Result> {
+  async execute(input: CreateCampaignData): Promise<Result> {
     try {
       if (!input.name.trim()) return { ok: false, error: "Nome da campanha é obrigatório" };
       if (!input.nicheId) return { ok: false, error: "Nicho é obrigatório" };
@@ -1132,16 +1131,16 @@ export class CreateCampaign {
 - [ ] **Step 2: Criar `src/use-cases/campanhas/RunCampaign.ts`**
 
 > **Decisão de design:** `RunCampaign` recebe `IAIService` como 5ª dependência. A IA gera as tags OSM antes de chamar o `IGeoService` — isso centraliza a lógica de "traduzir nicho → query Overpass" no use case, não no serviço de geo. O `IGeoService` continua agnóstico ao domínio de negócio.
+>
+> O prompt do sistema (`OSM_TAG_SYSTEM_PROMPT`) instrui a IA a retornar APENAS JSON com as 6 chaves — sem texto extra. Os exemplos embutidos no prompt cobrem os casos mais comuns do Brasil (restaurante, mecânica, academia, advocacia, salão).
 
 ```typescript
 import type { ICampaignRepository } from "@/domain/repositories/ICampaignRepository";
-import type { ILeadRepository } from "@/domain/repositories/ILeadRepository";
-import type { INicheRepository } from "@/domain/repositories/INicheRepository";
 import type { IAIService } from "@/domain/services/IAIService";
 import type { IGeoService, OsmTags } from "@/domain/services/IGeoService";
+import type { ILeadRepository } from "@/domain/repositories/ILeadRepository";
+import type { INicheRepository } from "@/domain/repositories/INicheRepository";
 
-// O prompt instrui a IA a retornar APENAS JSON com as 6 chaves — sem texto extra.
-// Os exemplos cobrem os casos mais comuns do Brasil (restaurante, mecânica, academia, advocacia, salão).
 const OSM_TAG_SYSTEM_PROMPT = `You are an OpenStreetMap (OSM) expert. Given a business niche name and description in Portuguese, return ONLY a valid JSON object with OSM tag values that best represent that type of business. Keys must be exactly: "amenity", "shop", "craft", "tourism", "office", "leisure". Values are arrays of OSM tag values in English. Return ONLY the JSON object, no explanation, no markdown.
 
 Example input: "Niche: Restaurantes e Lanchonetes"
@@ -1204,8 +1203,9 @@ export class RunCampaign {
     await this.campaignRepo.updateStatus(campaignId, companyId, "running");
 
     try {
-      // Passo 1: IA gera as tags OSM a partir do nome/descrição do nicho.
-      // Se a IA falhar (timeout, parsing inválido), cai no fallback por nome.
+      // IA lê o nome + descrição do nicho e gera as tags OSM adequadas.
+      // Não é necessário preencher keywords manualmente — o nome do nicho já é suficiente.
+      // additionalKeywords da campanha são usados como fallback por nome (busca textual).
       let osmTags: OsmTags | undefined;
       try {
         const nicheContext = niche.description
@@ -1222,9 +1222,9 @@ export class RunCampaign {
         console.warn("[RunCampaign] AI tag generation failed, falling back to name-only search", e);
       }
 
-      // Passo 2: Overpass usa as tags OSM como query primária.
-      // keywords do nicho são passadas como fallback — só ativadas se osmTags for undefined.
+      // keywords manuais do nicho + campanha como fallback de busca por nome
       const nameKeywords = [...niche.keywords, ...campaign.additionalKeywords];
+
       const results = await this.geoService.search({
         latitude: campaign.latitude,
         longitude: campaign.longitude,
@@ -1604,15 +1604,13 @@ useEffect(() => {
 ```typescript
 "use server";
 
-import { z } from "zod";
+import type { LeadStatus } from "@/domain/repositories/ILeadRepository";
+import { requireCompany, requireUser } from "@/lib/tenant";
 import { db } from "@/infrastructure/db";
 import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
 import { UpdateLeadStatus } from "@/use-cases/leads/UpdateLeadStatus";
-import { requireCompany, requireUser } from "@/lib/tenant";
 
-const statusValues = ["new","qualified","not_qualified","whatsapp_opened","message_sent","responded","lost","do_not_contact"] as const;
-
-export async function updateLeadStatusAction(leadId: string, status: typeof statusValues[number]) {
+export async function updateLeadStatusAction(leadId: string, status: LeadStatus) {
   const user = await requireUser();
   const { companyId } = await requireCompany(user.id);
   const repo = new DrizzleLeadRepository(db);
@@ -1620,6 +1618,8 @@ export async function updateLeadStatusAction(leadId: string, status: typeof stat
   return useCase.execute({ leadId, companyId, status });
 }
 ```
+
+`LeadStatus` já é exportado por `ILeadRepository.ts` (o mesmo union type usado no enum do schema) — reaproveitamos o tipo em vez de redeclarar um array `as const` local.
 
 - [ ] **Step 7: Criar `src/app/actions/leads/generate-diagnosis.ts`**
 
@@ -1862,8 +1862,9 @@ export function LoadingContent({ title, withHeader = true, rows = 4 }: LoadingCo
 
 import { useState } from "react";
 import { X } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 interface TagInputProps {
@@ -1894,17 +1895,19 @@ export function TagInput({ label, values, onChange, placeholder }: TagInputProps
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <div className="flex flex-wrap gap-1.5 rounded-lg border border-input bg-transparent p-2">
+      <div className="flex flex-wrap gap-1.5 rounded-lg border border-input bg-transparent p-2 min-h-10">
         {values.map((tag) => (
           <Badge key={tag} variant="secondary" className="gap-1 pr-1">
             {tag}
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={() => onChange(values.filter((t) => t !== tag))}
-              className="ml-0.5 hover:text-destructive"
+              className="ml-0.5 size-4 rounded-sm text-current hover:bg-transparent hover:text-destructive"
             >
               <X className="h-3 w-3" />
-            </button>
+            </Button>
           </Badge>
         ))}
         <input
@@ -1920,6 +1923,8 @@ export function TagInput({ label, values, onChange, placeholder }: TagInputProps
   );
 }
 ```
+
+O botão de remover tag usa o `Button` do shadcn (`variant="ghost" size="icon-xs"`) em vez de um `<button>` cru — mantém o mesmo padrão de foco/hover/acessibilidade dos outros botões do app, em vez de reimplementar esses estados manualmente.
 
 - [ ] **Step 2: Criar `src/components/LeadsMap.tsx`**
 
@@ -2120,7 +2125,7 @@ export default function CampaignMap({ campaign, leads }: CampaignMapProps) {
   return (
     <div
       ref={containerRef}
-      style={{ height: 420, width: "100%", borderRadius: "0.5rem" }}
+      style={{ height: 560, width: "100%", borderRadius: "0.5rem" }}
     />
   );
 }
@@ -2177,7 +2182,7 @@ Como a Fase 1 já entrega o `AppSidebar` construído sobre `Sidebar`/`SidebarMen
 
 ```tsx
 import Link from "next/link";
-import { BarChart2, Map, Tag, TrendingUp, Users } from "lucide-react";
+import { Map, Tag, TrendingUp, Users } from "lucide-react";
 
 import { requireCompany, requireUser } from "@/lib/tenant";
 import { db } from "@/infrastructure/db";
@@ -2203,7 +2208,7 @@ export default async function DashboardPage() {
 
   const activeNiches = niches.filter((n) => n.isActive).length;
   const completedCampaigns = campaigns.filter((c) => c.status === "completed").length;
-  const recentCampaigns = campaigns.slice(-5).reverse();
+  const recentCampaigns = [...campaigns].reverse().slice(0, 5);
 
   const stats = [
     { label: "Nichos ativos", value: activeNiches, icon: Tag, color: "text-primary bg-primary/10", href: "/prospeccao/nichos" },
@@ -2244,7 +2249,15 @@ export default async function DashboardPage() {
           Campanhas recentes
         </h2>
         {recentCampaigns.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma campanha criada ainda.</p>
+          <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
+            <p className="text-sm text-muted-foreground">Nenhuma campanha criada ainda.</p>
+            <Link
+              href="/prospeccao/campanhas"
+              className="mt-3 inline-block text-sm text-primary hover:text-primary/75"
+            >
+              Criar primeira campanha →
+            </Link>
+          </div>
         ) : (
           <div className="space-y-2">
             {recentCampaigns.map((c) => (
