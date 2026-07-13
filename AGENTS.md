@@ -255,11 +255,11 @@ src/
     │   ├── layout.tsx
     │   ├── login/page.tsx
     │   └── register/page.tsx
-    ├── (app)/
+    ├── (protected)/
     │   ├── layout.tsx
     │   └── prospeccao/page.tsx
     ├── layout.tsx
-    └── middleware.ts
+    └── proxy.ts
 ```
 
 ### Ao final da Fase 2
@@ -305,7 +305,7 @@ src/
     │   ├── nichos/...
     │   ├── campanhas/...
     │   └── leads/...
-    └── (app)/
+    └── (protected)/
         ├── layout.tsx          ← AppLayout com sidebar
         ├── prospeccao/
         │   ├── page.tsx
@@ -343,7 +343,7 @@ src/
 │   └── ConvertProspectingLead.ts
 └── app/
     ├── actions/funil/...
-    └── (app)/funil/page.tsx
+    └── (protected)/funil/page.tsx
 ```
 
 ---
