@@ -8,7 +8,7 @@ Instruções de comportamento, fluxo de trabalho e formato de documentação par
 
 Este projeto é construído por agentes de IA e **depois reescrito manualmente ao vivo** pelo desenvolvedor em uma live de programação. Isso significa que cada decisão técnica precisa ser explicada, cada passo precisa ser reproduzível, e a documentação gerada é tão importante quanto o código.
 
-Você é o engenheiro que constrói. O arquivo `phases/FASE_N.md` é o caderno de anotações que o desenvolvedor vai carregar para a live.
+Você é o engenheiro que constrói. A pasta `phases/aula-N/` é o caderno de anotações que o desenvolvedor vai carregar para a live — um arquivo por funcionalidade, não um único documento monolítico.
 
 ---
 
@@ -32,23 +32,22 @@ Você é o engenheiro que constrói. O arquivo `phases/FASE_N.md` é o caderno d
 
 ### Ao finalizar cada fase
 
-**Obrigatório:** criar `phases/FASE_[N]_[nome-da-fase].md` antes de declarar a fase concluída.
+**Obrigatório:** criar a pasta `phases/aula-[N]/` antes de declarar a fase concluída, com um arquivo por funcionalidade (fatia vertical: schema + domain + infra + use-case + action + UI daquela feature, do início ao fim — não organizado por camada). Todo arquivo de fase começa com `0_Conceitos-e-Mapa-de-Arquivos.md` (ou `0_Conceitos-e-Decisoes.md` na Fase 1), que serve de índice de leitura para os demais arquivos numerados da pasta, e termina com um arquivo `N_Verificacao-e-Armadilhas.md` consolidando a checklist final e as armadilhas da fase inteira.
 
 ---
 
-## Formato obrigatório do arquivo de fase
+## Formato obrigatório de cada arquivo de funcionalidade
 
-Cada arquivo em `phases/` segue exatamente este template:
+Cada arquivo dentro de `phases/aula-N/` segue exatamente este template (o índice `0_...` da pasta é mais enxuto — só lista os arquivos, conceitos e decisões gerais da fase; o template abaixo vale para os arquivos `1_...` em diante, que contêm o passo a passo de uma funcionalidade específica):
 
 ```markdown
-# Fase [N] — [Nome da Fase]
+# Aula [N] — [N]. [Nome da Funcionalidade]
 
-> **Para a live:** Este documento é seu roteiro. Leia do início ao fim antes de começar a codar.
-> Tempo estimado: [X horas]
+> Parte de `aula-[N]`. Pré-requisito: `[arquivo anterior].md`. Próximo arquivo: `[arquivo seguinte].md`.
 
 ---
 
-## O que foi construído nesta fase
+## O que este arquivo constrói
 
 Lista dos arquivos criados e modificados, com uma linha descrevendo o propósito de cada um.
 
@@ -163,35 +162,22 @@ npx better-auth secret
 
 ---
 
-[continua para cada arquivo da fase]
-
----
-
-## Comandos para rodar ao final
+## Comandos para rodar (se este arquivo tiver algum passo executável, ex: `drizzle-kit push`)
 
 ```bash
-npx drizzle-kit push    # aplica o schema no banco Neon
-npm run dev             # inicia o servidor
+npx drizzle-kit push    # se este arquivo mexeu no schema
+npm run dev             # se fizer sentido testar isoladamente aqui
+```
 ```
 
----
+O último arquivo numerado de cada pasta `aula-N/` (`N_Verificacao-e-Armadilhas.md`) consolida, para a fase inteira:
 
-## Verificação — como saber que funcionou
+```markdown
+## Verificação — como saber que a fase funciona
 
-Liste os testes manuais que confirmam que a fase está completa:
-
-- [ ] Acessar `/register` mostra o formulário
-- [ ] Preencher e submeter cria usuário, empresa e membro no banco
-- [ ] Acessar `/login` com as credenciais criadas funciona
-- [ ] Acessar `/prospeccao` sem sessão redireciona para `/login`
-- [ ] Acessar `/prospeccao` com sessão mostra nome do usuário e empresa
-
----
+- [ ] ...checklist cobrindo todas as funcionalidades da fase...
 
 ## Armadilhas e problemas encontrados
-
-Liste qualquer problema que surgiu durante a implementação e como foi resolvido.
-Estas notas evitam que o desenvolvedor caia no mesmo buraco durante a live.
 
 ### Armadilha 1 — [descrição]
 
@@ -199,13 +185,8 @@ Estas notas evitam que o desenvolvedor caia no mesmo buraco durante a live.
 **Causa:** ...
 **Solução:** ...
 
----
+## Próximos passos — o que vem na próxima aula
 
-## Próximos passos — o que vem na Fase [N+1]
-
-Uma lista do que será construído na próxima fase, para o desenvolvedor já ir se preparando.
-
-- ...
 - ...
 ```
 
@@ -216,8 +197,9 @@ Uma lista do que será construído na próxima fase, para o desenvolvedor já ir
 - **Código completo obrigatório.** O desenvolvedor não deve precisar adivinhar nenhum trecho. Se um arquivo tem 80 linhas, coloca as 80 linhas.
 - **Explique o que não é óbvio.** Não explique `const x = 1`. Explique por que usamos `db.transaction()`, por que o `id` do Better Auth é `text` e não `uuid`, por que o Leaflet precisa de `ssr: false`.
 - **Escreva para quem está ao vivo.** O desenvolvedor tem uma audiência assistindo. A documentação precisa ser clara o suficiente para ele explicar em voz alta enquanto digita.
-- **Passo a passo na ordem exata.** Se o arquivo B depende do arquivo A, A vem primeiro. Nunca assumir que o leitor vai intuir a ordem.
-- **Checklist de verificação obrigatória.** Toda fase termina com uma lista de itens para verificar manualmente.
+- **Passo a passo na ordem exata dentro do arquivo.** Se o arquivo B depende do arquivo A, A vem primeiro — tanto dentro de um arquivo de funcionalidade quanto na numeração dos arquivos dentro da pasta `aula-N/`.
+- **Fatia vertical, não camada.** Cada arquivo de funcionalidade (`2_Nichos.md`, `3_Campanhas.md`, etc.) contém tudo daquela feature — schema, domain, infra, use-case, action e UI — para que o desenvolvedor consiga montar o fluxo completo sem pular entre arquivos. Só a fundação compartilhada entre features (schema completo da fase, utilitários, layout) fica em um arquivo à parte no início da pasta.
+- **Checklist de verificação obrigatória.** Toda pasta `aula-N/` termina com um arquivo de verificação consolidada.
 
 ---
 
@@ -227,7 +209,17 @@ Uma lista do que será construído na próxima fase, para o desenvolvedor já ir
 
 ```
 phases/
-└── FASE_1_setup-base.md
+└── aula-1/
+    ├── 0_Conceitos-e-Decisoes.md
+    ├── 1_Setup-Projeto-e-Dependencias.md
+    ├── 2_Banco-de-Dados.md
+    ├── 3_Dominio-e-Repositorios.md
+    ├── 4_Autenticacao-Better-Auth.md
+    ├── 5_Actions-Login-e-Cadastro.md
+    ├── 6_Proxy-Protecao-de-Rotas.md
+    ├── 7_UI-Paginas-Auth.md
+    ├── 8_Layout-Protegido-e-Sidebar.md
+    └── 9_Verificacao-e-Armadilhas.md
 
 src/
 ├── domain/
@@ -266,8 +258,15 @@ src/
 
 ```
 phases/
-├── FASE_1_setup-base.md
-└── FASE_2_modulo-prospeccao.md
+├── aula-1/ (ver acima)
+└── aula-2/
+    ├── 0_Conceitos-e-Mapa-de-Arquivos.md
+    ├── 1_Fundacao-Schema-e-Utilitarios.md
+    ├── 2_Nichos.md
+    ├── 3_Campanhas.md
+    ├── 4_Leads.md
+    ├── 5_Dashboard-e-Layout.md
+    └── 6_Verificacao-e-Armadilhas.md
 
 src/
 ├── domain/repositories/
@@ -320,9 +319,15 @@ src/
 
 ```
 phases/
-├── FASE_1_setup-base.md
-├── FASE_2_modulo-prospeccao.md
-└── FASE_3_funil-comercial.md
+├── aula-1/ (ver acima)
+├── aula-2/ (ver acima)
+└── aula-3/
+    ├── 0_Conceitos-e-Mapa-de-Arquivos.md
+    ├── 1_Fundacao-Schema-Domain-Infra.md
+    ├── 2_Regras-de-Negocio.md
+    ├── 3_Interface-Kanban.md
+    ├── 4_Integracao-com-Prospeccao.md
+    └── 5_Verificacao-e-Armadilhas.md
 
 src/
 ├── domain/repositories/
@@ -344,6 +349,21 @@ src/
 └── app/
     ├── actions/funil/...
     └── (protected)/funil/page.tsx
+```
+
+### Ao final da Fase 4
+
+```
+phases/
+├── aula-1/ (ver acima)
+├── aula-2/ (ver acima)
+├── aula-3/ (ver acima)
+└── aula-4/
+    ├── 0_Conceitos-e-Mapa-de-Arquivos.md
+    ├── 1_Seed-Automatico-no-Cadastro.md
+    ├── 2_Metadata-Error-e-NotFound.md
+    ├── 3_Proxy-Validacao-de-Sessao.md
+    └── 4_Verificacao-Armadilhas-e-Pendencias.md
 ```
 
 ---
