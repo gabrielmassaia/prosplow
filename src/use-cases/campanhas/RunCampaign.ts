@@ -85,8 +85,6 @@ export class RunCampaign {
         console.warn("[RunCampaign] AI tag generation failed, falling back to name-only search", e);
       }
 
-      console.log("[RunCampaign] osmTags from AI:", osmTags);
-
       // keywords manuais do nicho + campanha como fallback de busca por nome
       const nameKeywords = [...niche.keywords, ...campaign.additionalKeywords];
 
