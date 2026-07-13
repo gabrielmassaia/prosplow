@@ -17,6 +17,7 @@
 | `src/domain/repositories/IUserRepository.ts` | Contrato de repositório de usuário |
 | `src/domain/repositories/ICompanyRepository.ts` | Contrato de repositório de empresa |
 | `src/infrastructure/repositories/DrizzleCompanyRepository.ts` | Implementação concreta com Drizzle |
+| `src/infrastructure/repositories/DrizzleUserRepository.ts` | Implementação concreta com Drizzle (ainda sem consumidor nesta fase — usado na Fase 4) |
 | `src/use-cases/auth/CreateUserWithCompany.ts` | Lógica de negócio: criar usuário + empresa em transação |
 | `src/lib/auth.ts` | Instância central do Better Auth (servidor) |
 | `src/lib/auth-client.ts` | Cliente React do Better Auth (browser) |
@@ -27,7 +28,7 @@
 | `src/app/(auth)/login/page.tsx` | Página de login |
 | `src/app/(auth)/register/page.tsx` | Página de cadastro |
 | `src/app/(protected)/layout.tsx` | Layout protegido: `SidebarProvider` + `AppSidebar` + `SidebarInset` |
-| `src/app/(protected)/prospeccao/page.tsx` | Página inicial protegida (placeholder) |
+| `src/app/(protected)/prospeccao/page.tsx` | Página inicial protegida: header + empty-state (Fase 2 substitui pelo dashboard real) |
 | `src/components/layout/Sidebar.tsx` | `AppSidebar` — construída sobre o bloco `sidebar` do shadcn/ui |
 | `src/components/ui/sidebar.tsx` | Bloco `sidebar` do shadcn/ui (`npx shadcn add sidebar`) |
 | `src/hooks/use-mobile.ts` | Hook usado pelo `sidebar` para detectar viewport mobile |
@@ -632,7 +633,7 @@ export interface ICompanyRepository {
 
 ---
 
-### Passo 9 — Implementação do repositório de empresa
+### Passo 9 — Implementação dos repositórios (empresa e usuário)
 
 Crie `src/infrastructure/repositories/DrizzleCompanyRepository.ts`:
 
@@ -688,6 +689,35 @@ export class DrizzleCompanyRepository implements ICompanyRepository {
 - `private db: DB` → injeção de dependência. O `db` vem de fora, não é importado aqui. `DB` é declarado localmente como `NodePgDatabase<typeof schema>` em vez de vir de um tipo compartilhado — cada repositório define seu próprio alias (mesmo padrão repetido nos repositórios da Fase 2).
 - `.returning({ id, name, slug })` → o Drizzle retorna só os campos que pedimos, já tipados
 - `result[0] ?? null` → `findFirst` no Drizzle com `.select()` retorna um array; pegamos o primeiro ou null
+
+Crie também `src/infrastructure/repositories/DrizzleUserRepository.ts` — a implementação de `IUserRepository` (Passo 8). Ela ainda não é chamada por nenhum use case desta fase, mas faz parte dos entregáveis obrigatórios da estrutura de pastas (ver AGENTS.md) porque a Fase 4 vai precisar de `findById` para o convite de membros por email:
+
+```typescript
+import { eq } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+
+import { usersTable } from "@/infrastructure/db/schema";
+import type { IUserRepository } from "@/domain/repositories/IUserRepository";
+import type * as schema from "@/infrastructure/db/schema";
+
+type DB = NodePgDatabase<typeof schema>;
+
+export class DrizzleUserRepository implements IUserRepository {
+  constructor(private db: DB) {}
+
+  async findById(id: string) {
+    const result = await this.db
+      .select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.id, id))
+      .limit(1);
+
+    return result[0] ?? null;
+  }
+}
+```
+
+**Por que criar um repositório que ninguém usa ainda?** É a mesma exceção ao YAGNI que abrimos para `IUserRepository` no Passo 8: a interface e a implementação concreta já nascem junto com o resto da camada de infraestrutura porque o contrato (`findById`) é trivial e estável — não vai mudar quando o use case de convite de membros (Fase 4) precisar dele. Diferente de deixar métodos especulativos numa interface grande, aqui é uma implementação completa de um contrato já fechado.
 
 ---
 
@@ -996,7 +1026,6 @@ Crie `src/app/layout.tsx`:
 ```tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Toaster } from "sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -1024,16 +1053,13 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full">
-        {children}
-        <Toaster position="top-right" richColors />
-      </body>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }
 ```
 
-`<Toaster>` já entra aqui, na Fase 1 — não é preciso adicioná-lo de novo na Fase 2 (o Task 1 daquele documento menciona isso, mas já vem pronto desde este passo).
+O `<Toaster>` do `sonner` **não** entra nesta fase — o pacote só é instalado na Fase 2 (junto com `react-hook-form`, `date-fns`, `lucide-react`). Ele será adicionado a este mesmo arquivo lá, quando as primeiras ações de nichos/campanhas passarem a disparar toasts de sucesso/erro.
 
 Crie `src/app/(auth)/layout.tsx`:
 
@@ -1505,22 +1531,44 @@ export default function Home() {
 Crie `src/app/(protected)/prospeccao/page.tsx`:
 
 ```tsx
-import { requireUser, requireCompany } from "@/lib/tenant";
+import { Target } from "lucide-react";
+
+import { requireCompany, requireUser } from "@/lib/tenant";
 
 export default async function ProspeccaoPage() {
   const user = await requireUser();
   const { company } = await requireCompany(user.id);
 
+  const firstName = user.name.split(" ")[0];
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-semibold">Prospecção Ativa</h1>
-      <p className="mt-2 text-gray-600">
-        Olá, {user.name} — {company?.name ?? "sem empresa"}
-      </p>
+    <div className="flex flex-1 flex-col p-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold text-foreground">Prospecção</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Olá, {firstName}. Bem-vindo de volta à{" "}
+          <span className="font-medium text-foreground">{company.name}</span>.
+        </p>
+      </div>
+
+      {/* Empty state */}
+      <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 py-20">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+          <Target className="h-6 w-6 text-primary" />
+        </div>
+        <h2 className="mt-4 text-base font-semibold text-foreground">Nenhuma campanha ainda</h2>
+        <p className="mt-1.5 max-w-sm text-center text-sm text-muted-foreground">
+          Na Fase 2 vamos criar campanhas de prospecção com busca geolocalizada e geração de leads
+          automática via Cloudflare AI.
+        </p>
+      </div>
     </div>
   );
 }
 ```
+
+Esta já é a versão final do placeholder — usa os tokens de tema (`text-foreground`, `bg-primary/10`) e o bloco `Sidebar`/`(protected)/layout.tsx` construído mais adiante neste mesmo documento, então o ícone `Target` e o card de empty-state já conversam visualmente com o resto do app desde a Fase 1.
 
 ---
 
