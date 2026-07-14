@@ -90,6 +90,7 @@ A coluna `crm_leads.value` é `numeric(10,2)`. O driver `node-postgres` retorna 
 | `src/app/actions/leads/get-leads-bootstrap.ts` | Modificar | Retornar também `convertedProspectingLeadIds` |
 | `src/app/(protected)/funil/page.tsx` | Criar | Server Component thin: `generateMetadata` + `BasePageLayout` + `Suspense` + Data Loader |
 | `src/app/(protected)/funil/_components/FunilContent.tsx` | Criar | Client Component: Kanban, drag-and-drop, drawer, criação de lead |
+| `src/app/(protected)/funil/_components/FunilContentLoader.tsx` | Criar | Wrapper `"use client"` que faz o `dynamic(..., { ssr: false })` de `FunilContent` — obrigatório porque `page.tsx` é Server Component e o Next.js 16 não permite `ssr: false` fora de um Client Component |
 | `src/app/(protected)/prospeccao/leads/_components/LeadsContent.tsx` | Modificar | Botão "Converter para CRM" no sheet de detalhe |
 | `src/app/(protected)/prospeccao/leads/page.tsx` | Modificar | Repassar `convertedProspectingLeadIds` |
 | `src/components/layout/Sidebar.tsx` | Modificar | Novo item de navegação "Funil" |

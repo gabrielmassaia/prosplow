@@ -32,6 +32,11 @@ Sem `activationConstraint: { distance: 5 }`, todo clique num card (inclusive o q
 ### Seed lazy é uma escolha deliberada, não um atalho
 A Fase 4 do SPEC menciona seed automático no primeiro login — isso pressupõe um hook de autenticação que ainda não existe. O seed lazy dentro do bootstrap do funil resolve o problema imediato (empresas sem etapas) sem acoplar a Fase 3 a uma peça de infraestrutura da Fase 4.
 
+### `ssr: false` não pode ficar num Server Component
+**Sintoma:** `npm run dev` sobe, mas `/funil` quebra com `Ecmascript file had an error: "ssr: false" is not allowed with next/dynamic in Server Components. Please move it into a Client Component.`
+**Causa:** `page.tsx` é um Server Component (`generateMetadata` + `async function`). Chamar `dynamic(() => import(...), { ssr: false })` diretamente nele é permitido em versões antigas do Next.js, mas o Next.js 16 passou a rejeitar explicitamente. `CampaignMap`/`LeadsMap` na Fase 2 não têm esse problema porque o `dynamic(ssr:false)` deles está dentro de Client Components (`CampanhaDetailContent`/`LeadsContent`), nunca dentro de um `page.tsx`.
+**Solução:** isolar a chamada `dynamic(..., { ssr: false })` num arquivo `"use client"` próprio (`FunilContentLoader.tsx`, ver `3_Interface-Kanban.md`) e importar o componente resultante normalmente no `page.tsx` — sem `dynamic` nenhum ali.
+
 ---
 
 ## Próximos passos — Fase 4

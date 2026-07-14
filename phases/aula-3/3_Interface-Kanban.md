@@ -4,21 +4,36 @@
 
 ## Task 8: Página do Funil — `src/app/(protected)/funil/page.tsx`
 
-Mesmo formato de Server Component thin das páginas da Fase 2 (`generateMetadata` + `BasePageLayout` + `Suspense` + Data Loader assíncrono chamando a bootstrap action). A diferença em relação às páginas da Fase 2: `FunilContent` usa `@dnd-kit`, que toca `document`/`window` durante a inicialização dos sensores — precisa entrar via `next/dynamic` com `ssr: false`, exatamente pela mesma razão que `CampaignMap`/`LeadsMap` (Leaflet) precisam disso na Fase 2. A regra do projeto é literal: **Leaflet / DnD → sempre `dynamic(() => import(...), { ssr: false })`.**
+Mesmo formato de Server Component thin das páginas da Fase 2 (`generateMetadata` + `BasePageLayout` + `Suspense` + Data Loader assíncrono chamando a bootstrap action). A diferença em relação às páginas da Fase 2: `FunilContent` usa `@dnd-kit`, que toca `document`/`window` durante a inicialização dos sensores — precisa entrar via `next/dynamic` com `ssr: false`, pela mesma razão que `CampaignMap`/`LeadsMap` (Leaflet) precisam disso na Fase 2. A regra do projeto é literal: **Leaflet / DnD → sempre `dynamic(() => import(...), { ssr: false })`.**
+
+A diferença é *onde* o `dynamic(..., { ssr: false })` pode ser chamado: `CampaignMap`/`LeadsMap` são importados dinamicamente de dentro de `CampanhaDetailContent`/`LeadsContent`, que já são `"use client"`. Aqui, `page.tsx` é um Server Component — e o Next.js 16 não permite `ssr: false` dentro de um Server Component (`Ecmascript file had an error: "ssr: false" is not allowed with next/dynamic in Server Components`). A chamada precisa morar dentro de um arquivo `"use client"` próprio.
+
+Crie `src/app/(protected)/funil/_components/FunilContentLoader.tsx`:
+
+```tsx
+"use client";
+
+import dynamic from "next/dynamic";
+
+export const FunilContent = dynamic(
+  () => import("./FunilContent").then((mod) => mod.FunilContent),
+  { ssr: false }
+);
+```
+
+**Por que `.then((mod) => mod.FunilContent)`?** `dynamic()` espera um componente como default export. `FunilContent` é um named export, então o `.then()` extrai o componente certo do módulo antes de passá-lo para `dynamic()`.
+
+`page.tsx` importa `FunilContent` normalmente deste loader — nenhum `dynamic`/`ssr: false` aparece no arquivo do Server Component:
 
 ```tsx
 import type { Metadata } from "next";
-import dynamic from "next/dynamic";
 import { Suspense } from "react";
 
 import { getFunilBootstrapAction } from "@/app/actions/funil/get-funil-bootstrap";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
-const FunilContent = dynamic(
-  () => import("./_components/FunilContent").then((mod) => mod.FunilContent),
-  { ssr: false }
-);
+import { FunilContent } from "./_components/FunilContentLoader";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: "Funil" };
@@ -41,8 +56,6 @@ async function FunilDataLoader() {
   return <FunilContent initialStages={stages} initialLeads={leads} />;
 }
 ```
-
-**Por que `.then((mod) => mod.FunilContent)`?** `dynamic()` espera um componente como default export. `FunilContent` é um named export, então o `.then()` extrai o componente certo do módulo antes de passá-lo para `dynamic()`.
 
 ---
 
