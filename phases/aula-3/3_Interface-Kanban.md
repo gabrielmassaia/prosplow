@@ -42,7 +42,7 @@ async function FunilDataLoader() {
 }
 ```
 
-**Armadilha corrigida:** a primeira versão desta página importava `FunilContent` estaticamente (`import { FunilContent } from "./_components/FunilContent"`). Funcionava em desenvolvimento, mas violava a regra de dynamic import client-only — o `@dnd-kit` acessa `document` na montagem dos sensores de drag, o que pode causar mismatch de hidratação em produção. O fix é o `dynamic(..., { ssr: false })` acima, junto de `.then((mod) => mod.FunilContent)` porque `FunilContent` é um named export, não default.
+**Por que `.then((mod) => mod.FunilContent)`?** `dynamic()` espera um componente como default export. `FunilContent` é um named export, então o `.then()` extrai o componente certo do módulo antes de passá-lo para `dynamic()`.
 
 ---
 
