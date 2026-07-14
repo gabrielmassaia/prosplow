@@ -158,7 +158,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {/* Form area */}
         <div className="relative flex flex-1 items-center justify-center p-8">
           {/* Card container */}
-          <div className="w-full max-w-[400px] rounded-2xl border border-border bg-card p-8 shadow-sm">
+          <div className="w-full max-w-[400px] rounded-2xl border border-border/60 bg-card p-8 shadow-md">
             {children}
           </div>
         </div>
