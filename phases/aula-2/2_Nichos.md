@@ -588,7 +588,7 @@ export function NichosContent({ initialNiches }: NichosContentProps) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {niches.map((niche) => (
-            <div key={niche.id} className="flex flex-col rounded-xl border border-border bg-card p-5">
+            <div key={niche.id} className="flex flex-col rounded-xl border border-border/60 bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
               <div className="mb-3 flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold text-foreground">{niche.name}</p>
@@ -616,7 +616,7 @@ export function NichosContent({ initialNiches }: NichosContentProps) {
                 {!niche.isActive && (
                   <AlertDialog>
                     <AlertDialogTrigger>
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-destructive transition-all hover:bg-muted">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-destructive transition-colors hover:bg-accent">
                         <Trash2 className="h-4 w-4" />
                       </span>
                     </AlertDialogTrigger>

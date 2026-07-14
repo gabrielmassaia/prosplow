@@ -69,7 +69,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map(({ label, value, icon: Icon, color, href }) => (
           <Link key={label} href={href}>
-            <div className="flex items-center gap-4 rounded-xl border border-border bg-card p-5 transition-shadow hover:shadow-sm">
+            <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
               <div
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${color}`}
               >
@@ -103,7 +103,7 @@ export default async function DashboardPage() {
           <div className="space-y-2">
             {recentCampaigns.map((c) => (
               <Link key={c.id} href={`/prospeccao/campanhas/${c.id}`}>
-                <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/40">
+                <div className="flex items-center justify-between rounded-lg border border-border/60 bg-card px-4 py-3.5 shadow-sm transition-colors hover:bg-accent/60">
                   <div>
                     <p className="text-sm font-medium text-foreground">{c.name}</p>
                     <p className="text-xs text-muted-foreground">

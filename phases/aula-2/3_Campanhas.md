@@ -856,7 +856,7 @@ export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasC
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className="overflow-x-auto rounded-xl border border-border/60 bg-card shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>
@@ -899,7 +899,7 @@ export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasC
                         <Link
                           href={`/prospeccao/campanhas/${c.id}`}
                           title="Ver detalhes"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-all hover:bg-muted hover:text-foreground"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-colors hover:bg-accent hover:text-foreground"
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
@@ -1120,7 +1120,7 @@ function Metric({
   color: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
+    <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card p-4 shadow-sm">
       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${color}`}>
         {icon}
       </div>
@@ -1191,7 +1191,7 @@ export function CampanhaDetailContent({
         <Link
           href="/prospeccao/campanhas"
           className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-lg border-transparent text-sm font-medium transition-all hover:bg-muted hover:text-foreground"
+            "inline-flex h-8 w-8 items-center justify-center rounded-lg border-transparent text-sm font-medium transition-colors hover:bg-accent hover:text-foreground"
           )}
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1225,7 +1225,7 @@ export function CampanhaDetailContent({
       </div>
 
       {/* Parâmetros */}
-      <div className="mb-6 rounded-xl border border-border bg-card p-4">
+      <div className="mb-6 rounded-xl border border-border/60 bg-card p-4 shadow-sm">
         <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Parâmetros da busca</p>
         <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
           <div>
@@ -1248,7 +1248,7 @@ export function CampanhaDetailContent({
 
       {/* Mapa */}
       {leads.length > 0 ? (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-xl border border-border/60 shadow-sm">
           <CampaignMap campaign={campaign} leads={leads} />
         </div>
       ) : (
@@ -1261,7 +1261,7 @@ export function CampanhaDetailContent({
         <div className="mt-4 flex justify-end">
           <Link
             href="/prospeccao/leads"
-            className="inline-flex h-7 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-all hover:bg-muted hover:text-foreground"
+            className="inline-flex h-7 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors hover:bg-accent hover:text-foreground"
           >
             Ver todos os leads
           </Link>
