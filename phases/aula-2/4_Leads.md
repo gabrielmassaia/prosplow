@@ -694,7 +694,7 @@ export function LeadsContent({ initialLeads, initialCampaigns }: LeadsContentPro
       </div>
 
       {/* Filtros */}
-      <div className="mb-4 flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-4">
+      <div className="mb-4 flex flex-wrap items-end gap-4 rounded-xl border border-border/60 bg-card p-4 shadow-sm">
         <div className="space-y-1.5">
           <Label className="text-xs">Campanha</Label>
           <Select value={campaignId} onValueChange={(v) => { if (v) { setCampaignId(v); setPage(1); } }}>
@@ -744,12 +744,12 @@ export function LeadsContent({ initialLeads, initialCampaigns }: LeadsContentPro
       </div>
 
       {view === "map" ? (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-xl border border-border/60 shadow-sm">
           <LeadsMap leads={filtered} onSelect={(lead) => setSelected(lead)} height={560} />
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-border">
+          <div className="overflow-x-auto rounded-xl border border-border/60 bg-card shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow>
