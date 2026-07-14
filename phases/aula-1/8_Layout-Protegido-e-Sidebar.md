@@ -77,18 +77,22 @@ Esta já é a versão final do placeholder — usa os tokens de tema (`text-fore
 
 ### Design tokens no `globals.css`
 
-O ProspFlow usa **indigo como cor primária de marca** (`oklch(0.511 0.243 264)` ≈ `#4F46E5`). Todos os neutrals têm um leve viés violeta — cinzas "escolhidos", não herdados do padrão.
+O ProspFlow usa **indigo como cor primária de marca** (`oklch(0.511 0.243 264)` ≈ `#4F46E5`), usado só em pontos de destaque (botões, links, foco, item ativo da nav) — nunca como cor de fundo de página. Todos os neutrals têm um leve viés violeta — cinzas "escolhidos", não herdados do padrão.
 
-O sistema de tokens sobrescreve os defaults cinzas do shadcn/ui e garante consistência em todos os componentes:
+O ponto que mais importa aqui não é o matiz, é a **escala de camadas**: fundo, card e sidebar precisam ter luminosidade perceptivelmente diferente entre si, senão a interface parece "uma folha branca só" e hovers ficam invisíveis. A escala usada:
 
 ```
---primary        → indigo brand (botões, links, foco, ring)
---sidebar        → surface levemente tintada de indigo
---sidebar-primary → indigo (item ativo na nav)
---muted-foreground → slate com leve violeta (labels, metadados)
+--background     0.965  → fundo da página (cinza suave, não branco)
+--card           0.995  → superfície dos cards (mais clara que o fundo — "flutua")
+--sidebar        0.930  → sidebar com "chrome" próprio, mais escura que o conteúdo
+--muted/secondary 0.930 → zonas neutras e badges
+--accent         0.900  → base do hover — precisa ser visivelmente mais escuro que o card/muted
+--border         0.870  → bordas discretas, trabalham junto com shadow-sm/shadow-md
 ```
 
-Cada token tem equivalente para `.dark`, com background `oklch(0.118 0.016 264)` (preto com azul-violeta — mais sofisticado que preto puro).
+Cada token tem equivalente para `.dark`, com background `oklch(0.118 0.016 264)` (preto com azul-violeta — mais sofisticado que preto puro); o modo escuro já nasceu com boa separação de camadas, então não precisou do mesmo recalibre.
+
+**Por que a sidebar é mais escura que o card, e não mais clara?** Cria a sensação de "app real" (como Linear/Vercel): a sidebar é o "chrome" da aplicação, o conteúdo é o que importa e por isso fica na camada mais clara/destacada.
 
 ### Sidebar — construída sobre o `Sidebar` do shadcn/ui
 
