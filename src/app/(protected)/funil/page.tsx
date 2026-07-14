@@ -1,15 +1,11 @@
 import type { Metadata } from "next";
-import dynamic from "next/dynamic";
 import { Suspense } from "react";
 
 import { getFunilBootstrapAction } from "@/app/actions/funil/get-funil-bootstrap";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
-const FunilContent = dynamic(
-  () => import("./_components/FunilContent").then((mod) => mod.FunilContent),
-  { ssr: false }
-);
+import { FunilContent } from "./_components/FunilContentLoader";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: "Funil" };
