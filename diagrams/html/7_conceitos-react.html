@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conceitos — Por que React? — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">conceitos-react</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Fundamentos · 07/10</p>
+    <h1 class="title">Conceitos — Por que React?</h1>
+    <p class="thesis">Antes do código: React troca <strong>"eu manipulo o DOM manualmente"</strong> por <strong>"eu descrevo como a UI deve ser"</strong> — o resto é reconciliação.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">O problema: DOM imperativo (era jQuery)</p>
+      <div class="columns"><div class="col tone-danger">
+        <div class="col-head"><span class="dot"></span>❌ Antes — imperativo</div>
+        <div class="step tone-danger">
+              
+              <div class="t">Estado muda (ex: novo lead)</div>
+              
+            </div>
+<div class="step tone-danger">
+              
+              <div class="t">Você encontra o elemento na tela</div>
+              
+            </div>
+<div class="step tone-danger">
+              
+              <div class="t">Você cria/atualiza/remove nós do DOM</div>
+              
+            </div>
+<div class="step tone-danger">
+              
+              <div class="t">Repete isso em cada lugar que usa o dado</div>
+              
+            </div>
+      </div>
+<div class="col tone-ok">
+        <div class="col-head"><span class="dot"></span>✅ Com React — declarativo</div>
+        <div class="step tone-ok">
+              
+              <div class="t">Estado muda (ex: novo lead)</div>
+              
+            </div>
+<div class="step tone-ok">
+              
+              <div class="t">Você descreve: "a lista de leads é isto"</div>
+              
+            </div>
+<div class="step tone-ok">
+              
+              <div class="t">React decide o que mudar na tela</div>
+              <div class="d">reconciliação</div>
+            </div>
+      </div></div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Virtual DOM e reconciliação</p>
+      <div class="flow"><div class="step tone-signal">
+        
+        <div class="t">setState() / re-render</div>
+        
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-signal">
+        
+        <div class="t">Nova árvore Virtual DOM em memória</div>
+        
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-signal">
+        
+        <div class="t">Diffing com a árvore anterior</div>
+        
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-signal">
+        
+        <div class="t">Patch mínimo calculado</div>
+        
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-ok">
+        
+        <div class="t">Só o patch é aplicado no DOM real</div>
+        
+      </div></div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Server Components vs Client Components (React 19 + Next.js 16)</p>
+      <div class="columns"><div class="col tone-signal">
+        <div class="col-head"><span class="dot"></span>Servidor (RSC)</div>
+        <div class="step tone-signal">
+              
+              <div class="t">app/(protected)/prospeccao/page.tsx</div>
+              <div class="d">Server Component</div>
+            </div>
+<div class="step tone-signal">
+              
+              <div class="t">Busca dados direto via requireUser() + repositório</div>
+              
+            </div>
+      </div>
+<div class="col tone-circuit">
+        <div class="col-head"><span class="dot"></span>"use client" — fronteira</div>
+        <div class="step tone-circuit">
+              
+              <div class="t">NichoForm.tsx</div>
+              <div class="d">useState, onSubmit</div>
+            </div>
+<div class="step tone-circuit">
+              
+              <div class="t">LeadsMap.tsx</div>
+              <div class="d">Leaflet — só client</div>
+            </div>
+<div class="step tone-circuit">
+              
+              <div class="t">KanbanBoard.tsx</div>
+              <div class="d">@dnd-kit, drag state</div>
+            </div>
+      </div></div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout">React nasceu para eliminar a manipulação manual do DOM em apps grandes com estado compartilhado — você descreve "como a UI deve ser para este estado" e a lib aplica as mudanças.</div>
+<div class="callout">Virtual DOM não é mágica, é otimização de diffing: manipular o DOM real é caro; comparar duas árvores em memória (JS puro) é barato.</div>
+<div class="callout">Por padrão, todo componente em <code>app/</code> roda no <strong>servidor</strong> — só vira Client Component (<code>"use client"</code>) quando precisa de interatividade real.</div>
+<div class="callout"><strong>Hidratação</strong> é o navegador "religando" o JS nos Client Components após o HTML inicial chegar — por isso Leaflet precisa de <code>dynamic(() =&gt; import(...), &#123; ssr: false &#125;)</code>.</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="6_funil-kanban.html"><span class="nav-k">&larr; Anterior</span>Fluxo — Funil Comercial (Kanban)</a>
+    <a class="next" href="8_conceitos-nextjs.html"><span class="nav-k">Próximo &rarr;</span>Conceitos — Por que Next.js?</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/7_conceitos-react.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

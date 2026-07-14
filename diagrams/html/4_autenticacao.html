@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluxo — Autenticação — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">autenticacao</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Aula 1 · 04/10</p>
+    <h1 class="title">Fluxo — Autenticação</h1>
+    <p class="thesis">Cadastro cria <strong>user + company + company_member</strong> em uma única transação — login e proteção de rotas usam a sessão gerada por esse cadastro.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">Signup — CreateUserWithCompany</p>
+      <div class="sequence">
+    <div class="lanes" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="lane-head">UI</div>
+<div class="lane-head">signup action</div>
+<div class="lane-head">CreateUserWithCompany</div>
+<div class="lane-head">Better Auth</div>
+<div class="lane-head">DrizzleCompanyRepository</div>
+<div class="lane-head">Neon</div>
+    </div>
+    <div class="lane-field" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="lifelines" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+        <div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+      </div>
+      <div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:1 / 3">
+        <span class="msg-label">signup({ name, email, password, companyName })</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:2 / 4">
+        <span class="msg-label">execute(input)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:3 / 5">
+        <span class="msg-label">auth.api.signUpEmail()</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:4 / 7">
+        <span class="msg-label">INSERT INTO users</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:3 / 7">
+        <span class="msg-label">user criado</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-self" style="grid-column:3 / 4"><span class="curl">&#8635;</span>slugify(companyName)</div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:3 / 6">
+        <span class="msg-label">create({ name, slug, ownerId })</span>
+      </div>
+    </div>
+<div class="note-row">db.transaction() — atômico: companies + company_members ou nada</div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:5 / 7">
+        <span class="msg-label">INSERT companies + company_members</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:3 / 7">
+        <span class="msg-label">company</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-l " style="grid-column:1 / 4">
+        <span class="msg-label">{ ok: true } → redireciona /prospeccao</span>
+      </div>
+    </div>
+    </div>
+  </div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Login</p>
+      <div class="sequence">
+    <div class="lanes" style="grid-template-columns:repeat(4, minmax(0, 1fr))">
+      <div class="lane-head">UI</div>
+<div class="lane-head">authClient</div>
+<div class="lane-head">/api/auth</div>
+<div class="lane-head">Neon</div>
+    </div>
+    <div class="lane-field" style="grid-template-columns:repeat(4, minmax(0, 1fr))">
+      <div class="lifelines" style="grid-template-columns:repeat(4, minmax(0, 1fr))">
+        <div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+      </div>
+      <div class="msg-row" style="grid-template-columns:repeat(4, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:1 / 3">
+        <span class="msg-label">signIn.email({ email, password })</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(4, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:2 / 4">
+        <span class="msg-label">POST /sign-in/email</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(4, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:3 / 5">
+        <span class="msg-label">valida credenciais (bcrypt.compare)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(4, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:3 / 5">
+        <span class="msg-label">usuário válido</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(4, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:1 / 4">
+        <span class="msg-label">sessão criada (cookie) → redireciona</span>
+      </div>
+    </div>
+    </div>
+  </div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Proteção de rotas</p>
+      <div class="flow"><div class="step tone-signal">
+        
+        <div class="t">Requisição para (protected)/*</div>
+        
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-signal">
+        
+        <div class="t">src/proxy.ts</div>
+        <div class="d">checa presença do cookie de sessão</div>
+      </div><div class="pipe tone-signal"><span class="label">cookie ausente → /login</span></div>
+<div class="step tone-signal">
+        
+        <div class="t">Server Component da página</div>
+        
+      </div><div class="pipe tone-signal"><span class="label">cookie presente</span></div>
+<div class="step tone-ok">
+        
+        <div class="t">requireUser() valida a sessão no banco</div>
+        <div class="d">renderiza a página se válida</div>
+      </div></div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout">A transação no signup é o ponto mais importante: sem <code>db.transaction()</code>, um <code>INSERT company_members</code> que falhar deixaria uma empresa órfã, sem dono.</div>
+<div class="callout"><code>users.id</code> é <b>text</b> (gerado pelo Better Auth) — <code>companies.owner_id</code> referencia esse campo como texto, nunca uuid.</div>
+<div class="callout">O proxy hoje só checa se o <em>cookie existe</em> — a validade real da sessão é checada depois, em <code>requireUser()</code>. A Aula 4 move essa validação para o próprio proxy.</div>
+<div class="callout"><code>role: "owner"</code> é o único valor usado hoje — <code>member</code> existe no schema para um fluxo futuro de convite de equipe, fora do escopo atual.</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="3_multi-tenant.html"><span class="nav-k">&larr; Anterior</span>Multi-Tenant — Isolamento por companyId</a>
+    <a class="next" href="5_prospeccao-campanha.html"><span class="nav-k">Próximo &rarr;</span>Fluxo — Prospecção (Campanha)</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/4_autenticacao.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

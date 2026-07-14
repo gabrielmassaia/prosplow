@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conceitos — Por que Neon? — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">conceitos-neon</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Fundamentos · 09/10</p>
+    <h1 class="title">Conceitos — Por que Neon?</h1>
+    <p class="thesis">Postgres tradicional foi feito para servidores de vida longa. Serverless/edge nasce e morre a cada requisição — Neon resolve esse descompasso.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">O problema — serverless + Postgres tradicional</p>
+      <div class="columns"><div class="col tone-danger">
+        <div class="col-head"><span class="dot"></span>Sem pooling</div>
+        <div class="step tone-danger">
+              
+              <div class="t">Requisição 1, 2, 3…N</div>
+              <div class="d">cada uma sobe uma função efêmera</div>
+            </div>
+<div class="step tone-danger">
+              
+              <div class="t">Cada função abre uma conexão TCP nova</div>
+              
+            </div>
+<div class="step tone-danger">
+              
+              <div class="t">Postgres tem limite fixo (ex: 100)</div>
+              
+            </div>
+<div class="step tone-danger">
+              
+              <div class="t">Pico de tráfego → "too many connections"</div>
+              
+            </div>
+      </div></div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">A solução — Neon (serverless Postgres + pooling)</p>
+      <div class="flow"><div class="step tone-signal">
+        
+        <div class="t">Requisições 1, 2, 3…N</div>
+        <div class="d">funções serverless</div>
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-signal">
+        
+        <div class="t">Pool singleton — src/infrastructure/db/index.ts</div>
+        <div class="d">criado uma única vez</div>
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-circuit">
+        
+        <div class="t">Connection pooler do Neon</div>
+        <div class="d">multiplexa conexões</div>
+      </div><div class="pipe tone-circuit"></div>
+<div class="step tone-ok">
+        
+        <div class="t">Neon Postgres — compute serverless</div>
+        <div class="d">escala para zero quando ocioso</div>
+      </div></div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout">O pool é criado <strong>uma única vez</strong>, como singleton — não uma conexão nova por requisição. É esse arquivo que os repositórios recebem por injeção no construtor.</div>
+<div class="callout"><code>sslmode=require</code> na <code>DATABASE_URL</code> não é opcional — o Neon exige TLS, diferente de um Postgres local em Docker.</div>
+<div class="callout">"Escala para zero": em dev (ou tráfego baixo à noite), o compute hiberna e você não paga por capacidade ociosa — acorda na próxima query, com pequena latência de cold start.</div>
+<div class="callout"><strong>Branching</strong> (não usado ainda no projeto): o Neon permite copiar o banco copy-on-write para testar uma migration arriscada sem tocar em produção.</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="8_conceitos-nextjs.html"><span class="nav-k">&larr; Anterior</span>Conceitos — Por que Next.js?</a>
+    <a class="next" href="10_visao-geral.html"><span class="nav-k">Próximo &rarr;</span>Visão Geral — O Stack Completo</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/9_conceitos-neon.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

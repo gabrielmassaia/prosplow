@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ERD — Banco de Dados Completo — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">banco-de-dados</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Schema · 02/10</p>
+    <h1 class="title">ERD — Banco de Dados Completo</h1>
+    <p class="thesis">Multi-tenant: <strong>toda</strong> tabela de negócio pendura em <code>companies</code> via <code>company_id</code>. Tabelas anotadas por aula em que foram introduzidas.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">Tabelas e chaves</p>
+      <div class="legend"><span><i style="background:var(--fog)"></i>Better Auth</span>
+<span><i style="background:var(--signal)"></i>aula-1 · tenant</span>
+<span><i style="background:var(--circuit)"></i>aula-2 · prospecção</span>
+<span><i style="background:var(--ok)"></i>aula-3 · funil</span></div>
+      <div class="erd-grid">
+    <div class="table-card">
+          <div class="th"><span class="dot dot-auth"></span>users</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">text</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">email</span>
+                  <span class="ftype">text unique</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">email_verified</span>
+                  <span class="ftype">boolean</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-auth"></span>sessions</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">text</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">token</span>
+                  <span class="ftype">text unique</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>user_id</span>
+                  <span class="ftype">text</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-auth"></span>accounts</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">text</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>user_id</span>
+                  <span class="ftype">text</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">password</span>
+                  <span class="ftype">text</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-tenant"></span>companies</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">slug</span>
+                  <span class="ftype">text unique</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>owner_id</span>
+                  <span class="ftype">text</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-tenant"></span>company_members</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>company_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>user_id</span>
+                  <span class="ftype">text</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">role</span>
+                  <span class="ftype">enum owner|member</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-prospeccao"></span>prospecting_niches</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>company_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">keywords</span>
+                  <span class="ftype">text[]</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">is_active</span>
+                  <span class="ftype">boolean</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-prospeccao"></span>prospecting_campaigns</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>company_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>niche_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">status</span>
+                  <span class="ftype">enum draft…failed</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">total_found</span>
+                  <span class="ftype">int</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-prospeccao"></span>prospecting_leads</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>company_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>campaign_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>niche_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">score</span>
+                  <span class="ftype">int 20-100</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">status</span>
+                  <span class="ftype">enum new…do_not_contact</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">ai_overview</span>
+                  <span class="ftype">text</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-funil"></span>funnel_stages</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>company_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">position</span>
+                  <span class="ftype">int</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">kind</span>
+                  <span class="ftype">enum normal|won|lost|triage</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-funil"></span>crm_leads</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>company_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>prospecting_lead_id</span>
+                  <span class="ftype">uuid?</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>stage_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname">origin</span>
+                  <span class="ftype">enum manual|prospecting</span>
+                </div>
+          </div>
+        </div>
+<div class="table-card">
+          <div class="th"><span class="dot dot-funil"></span>lead_activities</div>
+          <div class="rows">
+            <div class="field-row">
+                  <span class="fname"><span class="badge pk">PK</span>id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>company_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>lead_id</span>
+                  <span class="ftype">uuid</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>from_stage_id</span>
+                  <span class="ftype">uuid?</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>to_stage_id</span>
+                  <span class="ftype">uuid?</span>
+                </div>
+<div class="field-row">
+                  <span class="fname"><span class="badge fk">FK</span>created_by</span>
+                  <span class="ftype">text</span>
+                </div>
+          </div>
+        </div>
+  </div>
+  <div class="rel-list">
+    <div class="rel-item"><b>companies</b><span class="arrow">&#8594;</span>todas as tabelas de negócio <span>1:N via company_id</span></div>
+<div class="rel-item"><b>prospecting_niches</b><span class="arrow">&#8594;</span>prospecting_campaigns / prospecting_leads <span>1:N</span></div>
+<div class="rel-item"><b>prospecting_campaigns</b><span class="arrow">&#8594;</span>prospecting_leads <span>1:N</span></div>
+<div class="rel-item"><b>prospecting_leads</b><span class="arrow">&#8594;</span>crm_leads <span>1:1 nullable — ConvertProspectingLead</span></div>
+<div class="rel-item"><b>funnel_stages</b><span class="arrow">&#8594;</span>crm_leads <span>1:N</span></div>
+<div class="rel-item"><b>crm_leads</b><span class="arrow">&#8594;</span>lead_activities <span>1:N — histórico</span></div>
+<div class="rel-item"><b>funnel_stages</b><span class="arrow">&#8594;</span>lead_activities <span>from_stage_id / to_stage_id (nullable)</span></div>
+  </div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout"><strong>Toda tabela de negócio pendura em <code>companies</code>.</strong> Se você adicionar uma tabela nova e ela não tiver <code>company_id</code>, algo está errado no design.</div>
+<div class="callout"><code>prospecting_leads → crm_leads</code> é 1:1 nullable — um lead de prospecção pode virar (ou não) um lead do funil comercial.</div>
+<div class="callout"><code>lead_activities</code> tem duas FKs para <code>funnel_stages</code> (from/to), ambas nullable — a primeira atividade de um lead não tem "de onde".</div>
+<div class="callout"><code>users.id</code> é <b>text</b> (Better Auth gera IDs como string) enquanto o resto do schema usa <b>uuid</b> — nunca referenciar <code>owner_id</code>/<code>created_by</code> como uuid.</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="1_arquitetura.html"><span class="nav-k">&larr; Anterior</span>Clean Architecture Pragmático</a>
+    <a class="next" href="3_multi-tenant.html"><span class="nav-k">Próximo &rarr;</span>Multi-Tenant — Isolamento por companyId</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/2_banco-de-dados.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

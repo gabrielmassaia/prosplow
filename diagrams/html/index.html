@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProspFlow — Diagramas</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .grid-index {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+  .card-index {
+    display: block;
+    text-decoration: none;
+    color: var(--paper);
+    background: var(--ink-2);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.4rem;
+    transition: border-color 0.15s, transform 0.15s;
+    opacity: 0;
+    transform: translateY(8px);
+    animation: rise 0.6s ease-out forwards;
+  }
+  .card-index:hover { border-color: var(--signal); transform: translateY(-2px); }
+  .card-index .num { font-family: var(--font-mono); color: var(--signal); font-size: 0.78rem; }
+  .card-index h3 { margin: 0.4rem 0 0.35rem; font-family: var(--font-mono); font-size: 1.02rem; }
+  .card-index p { margin: 0; color: var(--fog); font-size: 0.86rem; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs"><span class="current">diagrams</span></div>
+  <div class="actions"><button class="btn" id="theme-toggle">&#9788; Tema</button></div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">ProspFlow · Material de apoio para as lives</p>
+    <h1 class="title">Diagramas</h1>
+    <p class="thesis">Arquitetura, banco de dados, fluxos de negócio e os fundamentos de React/Next.js/Neon — construídos em HTML e CSS puro, sem lib de diagramação. Abra qualquer página com duplo clique: funciona offline.</p>
+  </div>
+  <div class="grid-index">
+    <a class="card-index" style="animation-delay:0s" href="1_arquitetura.html">
+      <span class="num">01/10</span>
+      <h3>Clean Architecture Pragmático</h3>
+      <p>Arquitetura</p>
+    </a>
+<a class="card-index" style="animation-delay:0.04s" href="2_banco-de-dados.html">
+      <span class="num">02/10</span>
+      <h3>ERD — Banco de Dados Completo</h3>
+      <p>Schema</p>
+    </a>
+<a class="card-index" style="animation-delay:0.08s" href="3_multi-tenant.html">
+      <span class="num">03/10</span>
+      <h3>Multi-Tenant — Isolamento por companyId</h3>
+      <p>Tenant safety</p>
+    </a>
+<a class="card-index" style="animation-delay:0.12s" href="4_autenticacao.html">
+      <span class="num">04/10</span>
+      <h3>Fluxo — Autenticação</h3>
+      <p>Aula 1</p>
+    </a>
+<a class="card-index" style="animation-delay:0.16s" href="5_prospeccao-campanha.html">
+      <span class="num">05/10</span>
+      <h3>Fluxo — Prospecção (Campanha)</h3>
+      <p>Aula 2</p>
+    </a>
+<a class="card-index" style="animation-delay:0.2s" href="6_funil-kanban.html">
+      <span class="num">06/10</span>
+      <h3>Fluxo — Funil Comercial (Kanban)</h3>
+      <p>Aula 3</p>
+    </a>
+<a class="card-index" style="animation-delay:0.24s" href="7_conceitos-react.html">
+      <span class="num">07/10</span>
+      <h3>Conceitos — Por que React?</h3>
+      <p>Fundamentos</p>
+    </a>
+<a class="card-index" style="animation-delay:0.28s" href="8_conceitos-nextjs.html">
+      <span class="num">08/10</span>
+      <h3>Conceitos — Por que Next.js?</h3>
+      <p>Fundamentos</p>
+    </a>
+<a class="card-index" style="animation-delay:0.32s" href="9_conceitos-neon.html">
+      <span class="num">09/10</span>
+      <h3>Conceitos — Por que Neon?</h3>
+      <p>Fundamentos</p>
+    </a>
+<a class="card-index" style="animation-delay:0.36s" href="10_visao-geral.html">
+      <span class="num">10/10</span>
+      <h3>Visão Geral — O Stack Completo</h3>
+      <p>Slide de abertura</p>
+    </a>
+  </div>
+  <footer class="credits">Fonte de verdade: diagrams/*.md — regenerar com <code>node generate.mjs</code></footer>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

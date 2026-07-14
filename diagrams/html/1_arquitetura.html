@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clean Architecture Pragmático — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">arquitetura</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Arquitetura · 01/10</p>
+    <h1 class="title">Clean Architecture Pragmático</h1>
+    <p class="thesis">As setas de dependência sempre apontam para dentro: <strong>app → use-cases → domain</strong>, e <strong>infrastructure → domain</strong>. Nunca o contrário.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">As camadas</p>
+      <div class="columns"><div class="col tone-fog">
+        <div class="col-head"><span class="dot"></span>app/ — controllers finos</div>
+        <div class="step tone-fog">
+              
+              <div class="t">Server Actions</div>
+              <div class="d">app/actions/*.ts</div>
+            </div>
+<div class="step tone-fog">
+              
+              <div class="t">Server Components / Pages</div>
+              <div class="d">app/(protected)/*</div>
+            </div>
+      </div>
+<div class="col tone-signal">
+        <div class="col-head"><span class="dot"></span>use-cases/ — negócio</div>
+        <div class="step tone-signal">
+              
+              <div class="t">RunCampaign, MoveLead, CreateUserWithCompany…</div>
+              <div class="d">Recebem apenas interfaces</div>
+            </div>
+      </div>
+<div class="col tone-signal">
+        <div class="col-head"><span class="dot"></span>domain/ — contratos</div>
+        <div class="step tone-signal">
+              
+              <div class="t">ICampaignRepository</div>
+              
+            </div>
+<div class="step tone-signal">
+              
+              <div class="t">ILeadRepository · IGeoService · IAIService</div>
+              
+            </div>
+      </div>
+<div class="col tone-circuit">
+        <div class="col-head"><span class="dot"></span>infrastructure/ — implementações</div>
+        <div class="step tone-circuit">
+              
+              <div class="t">DrizzleCampaignRepository</div>
+              <div class="d">implementa ICampaignRepository</div>
+            </div>
+<div class="step tone-circuit">
+              
+              <div class="t">OverpassGeoService · CloudflareAIService</div>
+              <div class="d">implementam IGeoService / IAIService</div>
+            </div>
+<div class="step tone-circuit">
+              
+              <div class="t">db/schema.ts + db/index.ts</div>
+              <div class="d">Drizzle + pool Neon</div>
+            </div>
+      </div></div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Injeção de dependência — runCampaignAction</p>
+      <div class="sequence">
+    <div class="lanes" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="lane-head">UI</div>
+<div class="lane-head">Action</div>
+<div class="lane-head">RunCampaign</div>
+<div class="lane-head">DrizzleCampaignRepository</div>
+<div class="lane-head">OverpassGeoService</div>
+<div class="lane-head">Neon</div>
+    </div>
+    <div class="lane-field" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="lifelines" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+        <div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+      </div>
+      <div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:1 / 3">
+        <span class="msg-label">runCampaignAction(campaignId)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-self" style="grid-column:2 / 3"><span class="curl">&#8635;</span>requireUser() + requireCompany()</div>
+    </div>
+<div class="note-row">Action instancia as implementações concretas — único lugar que faz isso</div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:2 / 4">
+        <span class="msg-label">new RunCampaign(repo, geo)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r tone-circuit" style="grid-column:3 / 5">
+        <span class="msg-label">findById(id, companyId)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:4 / 7">
+        <span class="msg-label">SELECT … WHERE company_id = $1</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:4 / 7">
+        <span class="msg-label">campaign</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r tone-circuit" style="grid-column:3 / 6">
+        <span class="msg-label">search(params)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:3 / 6">
+        <span class="msg-label">GeoResult[]</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-l " style="grid-column:2 / 4">
+        <span class="msg-label">{ ok: true, data }</span>
+      </div>
+    </div>
+    </div>
+  </div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout">A seta <b>implementa</b> é a inversão de dependência (DIP): <code>DrizzleCampaignRepository</code> e <code>OverpassGeoService</code> apontam <em>para</em> a interface — o use case só enxerga <code>ICampaignRepository</code>/<code>IGeoService</code>.</div>
+<div class="callout"><strong>app/ nunca fala com <code>db</code> diretamente.</strong> Se aparecer <code>db.query…</code> dentro de <code>app/actions/</code>, é violação de arquitetura.</div>
+<div class="callout">Trocar Overpass por outro provider de geo significa criar uma nova classe em <code>infrastructure/services/</code> e mudar uma linha na action — nada em <code>use-cases/</code> muda (OCP).</div>
+<div class="callout"><code>companyId</code> sempre explícito nos parâmetros — nunca contexto global. Ver <code>3_multi-tenant</code>.</div>
+  </div>
+  
+  <div class="pagenav">
+    <span></span>
+    <a class="next" href="2_banco-de-dados.html"><span class="nav-k">Próximo &rarr;</span>ERD — Banco de Dados Completo</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/1_arquitetura.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluxo — Prospecção (Campanha) — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">prospeccao-campanha</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Aula 2 · 05/10</p>
+    <h1 class="title">Fluxo — Prospecção (Campanha)</h1>
+    <p class="thesis">O usuário digita um <strong>CEP</strong> — o resto (cidade, coordenadas, busca georreferenciada, score e qualificação por IA) é orquestrado pelo use case, nunca pela infraestrutura.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">Formulário — CEP → coordenadas (client-side)</p>
+      <div class="sequence">
+    <div class="lanes" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="lane-head">Formulário</div>
+<div class="lane-head">ViaCEP</div>
+<div class="lane-head">Nominatim</div>
+    </div>
+    <div class="lane-field" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="lifelines" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+        <div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+      </div>
+      <div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-self" style="grid-column:1 / 2"><span class="curl">&#8635;</span>onBlur no campo CEP</div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-line dir-r tone-circuit" style="grid-column:1 / 3">
+        <span class="msg-label">GET /ws/{cep}/json</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:1 / 3">
+        <span class="msg-label">{ localidade, uf, logradouro }</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-line dir-r tone-circuit" style="grid-column:1 / 4">
+        <span class="msg-label">GET /search?q=…</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:1 / 4">
+        <span class="msg-label">[{ lat, lon }]</span>
+      </div>
+    </div>
+<div class="note-row">cidade/estado ficam editáveis; lat/lon aparecem como confirmação read-only</div>
+    </div>
+  </div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Execução — RunCampaign</p>
+      <div class="sequence">
+    <div class="lanes" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="lane-head">Action</div>
+<div class="lane-head">RunCampaign</div>
+<div class="lane-head">OverpassGeoService</div>
+<div class="lane-head">Overpass</div>
+<div class="lane-head">LeadRepo</div>
+<div class="lane-head">CampRepo</div>
+<div class="lane-head">Neon</div>
+    </div>
+    <div class="lane-field" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="lifelines" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+        <div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+      </div>
+      <div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:1 / 3">
+        <span class="msg-label">execute({ campaignId, companyId })</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:2 / 7">
+        <span class="msg-label">findById + updateStatus('running')</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-r tone-circuit" style="grid-column:2 / 4">
+        <span class="msg-label">search({ lat, lon, radiusKm, keywords })</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-self" style="grid-column:3 / 4"><span class="curl">&#8635;</span>monta query dupla (amenity + name)</div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-r tone-circuit" style="grid-column:3 / 5">
+        <span class="msg-label">POST /api/interpreter</span>
+      </div>
+    </div>
+<div class="note-row">Headers obrigatórios: Accept + User-Agent — senão 406</div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:3 / 5">
+        <span class="msg-label">nodes/ways encontrados</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:2 / 4">
+        <span class="msg-label">GeoResult[]</span>
+      </div>
+    </div>
+<div class="loop-row"><div class="loop-label">loop — cada resultado</div><div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-self" style="grid-column:2 / 3"><span class="curl">&#8635;</span>calcula score (20–100)</div>
+    </div></div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:2 / 6">
+        <span class="msg-label">bulkCreate(leads com score)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:5 / 8">
+        <span class="msg-label">INSERT prospecting_leads</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(7, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:2 / 7">
+        <span class="msg-label">updateStatus('completed', totalFound)</span>
+      </div>
+    </div>
+    </div>
+  </div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Qualificação por IA — sob demanda</p>
+      <div class="sequence">
+    <div class="lanes" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="lane-head">Sheet do lead</div>
+<div class="lane-head">Action</div>
+<div class="lane-head">GenerateDiagnosis</div>
+<div class="lane-head">CloudflareAIService</div>
+<div class="lane-head">Cloudflare AI</div>
+<div class="lane-head">LeadRepo</div>
+    </div>
+    <div class="lane-field" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="lifelines" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+        <div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+      </div>
+      <div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:1 / 3">
+        <span class="msg-label">generateDiagnosisAction(leadId)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:2 / 4">
+        <span class="msg-label">execute({ leadId, companyId })</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r tone-circuit" style="grid-column:3 / 5">
+        <span class="msg-label">complete(system, user)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r tone-circuit" style="grid-column:4 / 6">
+        <span class="msg-label">POST …/llama-3-8b-instruct</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:4 / 6">
+        <span class="msg-label">{ aiOverview, suggestedOffer }</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:3 / 7">
+        <span class="msg-label">update(leadId, companyId, {...})</span>
+      </div>
+    </div>
+    </div>
+  </div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout">A <strong>query dupla</strong> do Overpass existe por causa do idioma: keywords em português, mas o OSM usa <code>amenity</code> em inglês. A busca por nome é o fallback.</div>
+<div class="callout">O <strong>score é calculado no use case</strong>, não na infraestrutura — <code>OverpassGeoService</code> só devolve dados brutos.</div>
+<div class="callout">O header <code>Accept</code> no fetch server-side é uma armadilha real: Node não envia isso por padrão como o navegador envia, e a Overpass responde <code>406</code> sem ele.</div>
+<div class="callout"><code>GenerateDiagnosis</code>/<code>GenerateMessage</code> qualificam <em>um</em> lead por vez, sob demanda — diferente do <code>RunCampaign</code>, que processa em lote.</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="4_autenticacao.html"><span class="nav-k">&larr; Anterior</span>Fluxo — Autenticação</a>
+    <a class="next" href="6_funil-kanban.html"><span class="nav-k">Próximo &rarr;</span>Fluxo — Funil Comercial (Kanban)</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/5_prospeccao-campanha.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

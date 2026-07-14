@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visão Geral — O Stack Completo — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">visao-geral</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Slide de abertura · 10/10</p>
+    <h1 class="title">Visão Geral — O Stack Completo</h1>
+    <p class="thesis">Um mapa único ligando tudo — use este diagrama para abrir qualquer aula antes de mergulhar no assunto específico do dia.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">Do navegador ao banco</p>
+      <div class="flow"><div class="step tone-fog">
+        <div class="k">Cliente</div>
+        <div class="t">🖥️ Navegador — React 19 + Client Components</div>
+        
+      </div><div class="pipe tone-fog"></div>
+<div class="step tone-signal">
+        <div class="k">Vercel</div>
+        <div class="t">proxy.ts → Server Components / Server Actions</div>
+        <div class="d">Next.js 16 App Router</div>
+      </div><div class="pipe tone-signal"><span class="label">requisição</span></div>
+<div class="step tone-signal">
+        <div class="k">Núcleo</div>
+        <div class="t">use-cases/ → domain/ (interfaces)</div>
+        <div class="d">Clean Architecture</div>
+      </div><div class="pipe tone-signal"><span class="label">companyId explícito</span></div>
+<div class="step tone-circuit">
+        <div class="k">infrastructure/</div>
+        <div class="t">Drizzle repositories + services</div>
+        <div class="d">implementam as interfaces</div>
+      </div><div class="pipe tone-circuit"><span class="label">implementa</span></div>
+<div class="step tone-ok">
+        <div class="k">Dados</div>
+        <div class="t">🗄️ Neon Postgres — serverless + pool</div>
+        
+      </div></div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Integrações externas</p>
+      <div class="columns"><div class="col tone-fog">
+        <div class="col-head"><span class="dot"></span>Auth</div>
+        <div class="step tone-fog">
+              
+              <div class="t">Better Auth</div>
+              <div class="d">sessão / credenciais</div>
+            </div>
+      </div>
+<div class="col tone-circuit">
+        <div class="col-head"><span class="dot"></span>Client-side</div>
+        <div class="step tone-circuit">
+              
+              <div class="t">ViaCEP</div>
+              <div class="d">CEP → cidade/UF</div>
+            </div>
+<div class="step tone-circuit">
+              
+              <div class="t">Nominatim/OSM</div>
+              <div class="d">endereço → lat/lon</div>
+            </div>
+      </div>
+<div class="col tone-circuit">
+        <div class="col-head"><span class="dot"></span>Server-side</div>
+        <div class="step tone-circuit">
+              
+              <div class="t">Overpass API</div>
+              <div class="d">busca georreferenciada</div>
+            </div>
+<div class="step tone-circuit">
+              
+              <div class="t">Cloudflare Workers AI</div>
+              <div class="d">diagnóstico + mensagem</div>
+            </div>
+      </div></div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout"><strong>Duas famílias de chamada externa:</strong> ViaCEP e Nominatim rodam direto do navegador (client-side); Overpass e Cloudflare AI rodam do servidor, atrás de uma interface.</div>
+<div class="callout">Better Auth fica <em>ao lado</em> do núcleo, não dentro dele — é infraestrutura de autenticação consumida direto por <code>app/</code>, não modelada como repositório de domínio.</div>
+<div class="callout">Todo caminho até o banco passa pelo núcleo — não existe atalho de <code>app/</code> direto para <code>db</code>. Ver <code>1_arquitetura</code> para o detalhe.</div>
+<div class="callout">Para a live: comece por este diagrama, depois desça para o específico do assunto do dia.</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="9_conceitos-neon.html"><span class="nav-k">&larr; Anterior</span>Conceitos — Por que Neon?</a>
+    <span></span>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/10_visao-geral.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

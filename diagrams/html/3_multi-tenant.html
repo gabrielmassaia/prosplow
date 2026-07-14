@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Tenant — Isolamento por companyId — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">multi-tenant</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Tenant safety · 03/10</p>
+    <h1 class="title">Multi-Tenant — Isolamento por companyId</h1>
+    <p class="thesis">A regra de ouro: <strong>toda query filtra por company_id, sem exceção.</strong> O tenant nasce na sessão e é carregado explicitamente por todas as camadas.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">Do cookie até o WHERE</p>
+      <div class="flow"><div class="step tone-fog">
+        <div class="k">Sessão</div>
+        <div class="t">Cookie / token Better Auth</div>
+        
+      </div><div class="pipe tone-fog"></div>
+<div class="step tone-signal">
+        <div class="k">src/lib/tenant.ts</div>
+        <div class="t">requireUser()</div>
+        <div class="d">resolve o usuário autenticado</div>
+      </div><div class="pipe tone-signal"><span class="label">user.id</span></div>
+<div class="step tone-signal">
+        <div class="k">src/lib/tenant.ts</div>
+        <div class="t">requireCompany(user.id)</div>
+        <div class="d">resolve a empresa do usuário</div>
+      </div><div class="pipe tone-signal"><span class="label">{ companyId }</span></div>
+<div class="step tone-signal">
+        <div class="k">app/actions</div>
+        <div class="t">Server Action (controller fino)</div>
+        
+      </div><div class="pipe tone-signal"><span class="label">companyId explícito</span></div>
+<div class="step tone-signal">
+        <div class="k">use-cases</div>
+        <div class="t">execute({ ..., companyId })</div>
+        
+      </div><div class="pipe tone-signal"><span class="label">companyId explícito</span></div>
+<div class="step tone-circuit">
+        <div class="k">infrastructure</div>
+        <div class="t">findAllByCompany(companyId)</div>
+        
+      </div><div class="pipe tone-circuit"><span class="label">WHERE company_id = $1</span></div>
+<div class="step tone-circuit">
+        <div class="k">Neon Postgres</div>
+        <div class="t">Query filtrada por tenant</div>
+        
+      </div></div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Nunca fazer</p>
+      <div class="columns"><div class="col tone-danger">
+        <div class="col-head"><span class="dot"></span>❌ Vaza dados entre tenants</div>
+        <div class="step tone-danger">
+              
+              <div class="t">findAll() sem companyId</div>
+              
+            </div>
+<div class="step tone-danger">
+              
+              <div class="t">Action lendo companyId de variável global</div>
+              
+            </div>
+<div class="step tone-danger">
+              
+              <div class="t">Repositório assumindo tenant do contexto</div>
+              
+            </div>
+      </div></div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout"><code>requireCompany(user.id)</code> é o único lugar que resolve "qual empresa é essa" — depois disso <code>companyId</code> é só um valor passado por parâmetro.</div>
+<div class="callout">Compare a assinatura correta com a errada: <code>findAllByCompany(companyId)</code> ✅ vs. <code>findAll()</code> ❌.</div>
+<div class="callout">Por que importa: se um repositório esquecer o <code>WHERE company_id</code>, a query retorna dados de <em>todas</em> as agências — um vazamento real de dados entre clientes do SaaS, do tipo que não aparece testando com um único usuário.</div>
+<div class="callout">Toda action começa com <code>requireUser()</code> → <code>requireCompany(user.id)</code> — convenção fixa do projeto, sem exceção.</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="2_banco-de-dados.html"><span class="nav-k">&larr; Anterior</span>ERD — Banco de Dados Completo</a>
+    <a class="next" href="4_autenticacao.html"><span class="nav-k">Próximo &rarr;</span>Fluxo — Autenticação</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/3_multi-tenant.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

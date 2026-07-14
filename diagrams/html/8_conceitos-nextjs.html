@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conceitos — Por que Next.js? — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">conceitos-nextjs</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Fundamentos · 08/10</p>
+    <h1 class="title">Conceitos — Por que Next.js?</h1>
+    <p class="thesis">React puro não decide <strong>onde</strong> renderizar nem tem roteamento. Next.js resolve os dois: pastas viram rotas, e o servidor renderiza por padrão.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">O problema do SPA puro (sem framework)</p>
+      <div class="sequence">
+    <div class="lanes" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="lane-head">Navegador</div>
+<div class="lane-head">Servidor estático</div>
+<div class="lane-head">Bundle JS</div>
+    </div>
+    <div class="lane-field" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="lifelines" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+        <div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+      </div>
+      <div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:1 / 3">
+        <span class="msg-label">GET /prospeccao</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:1 / 3">
+        <span class="msg-label">HTML quase vazio (&amp;lt;div id=root&amp;gt;)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:1 / 4">
+        <span class="msg-label">baixa o bundle inteiro</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(3, minmax(0, 1fr))">
+      <div class="msg-self" style="grid-column:3 / 4"><span class="curl">&#8635;</span>executa React + busca dados (client-side)</div>
+    </div>
+<div class="note-row">Crawlers veem página vazia. Usuário espera o JS baixar + rodar para ver algo.</div>
+    </div>
+  </div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Ciclo de vida de uma requisição — App Router</p>
+      <div class="flow"><div class="step tone-signal">
+        
+        <div class="t">GET /prospeccao/campanhas</div>
+        
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-signal">
+        
+        <div class="t">src/proxy.ts (middleware)</div>
+        <div class="d">checa cookie / rota pública</div>
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-signal">
+        
+        <div class="t">app/(protected)/layout.tsx</div>
+        <div class="d">Server Component</div>
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-signal">
+        
+        <div class="t">page.tsx — renderiza no servidor</div>
+        <div class="d">requireUser() + repositório + HTML</div>
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-circuit">
+        
+        <div class="t">HTML + RSC payload enviados</div>
+        
+      </div><div class="pipe tone-circuit"></div>
+<div class="step tone-ok">
+        
+        <div class="t">Navegador hidrata só os Client Components</div>
+        <div class="d">página interativa</div>
+      </div></div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Estratégias de renderização</p>
+      <div class="columns"><div class="col tone-ok">
+        <div class="col-head"><span class="dot"></span>SSR — usado no ProspFlow</div>
+        <div class="step tone-ok">
+              
+              <div class="t">Renderiza a cada requisição</div>
+              <div class="d">dashboard, leads, kanban — dados sempre atuais</div>
+            </div>
+      </div>
+<div class="col tone-fog">
+        <div class="col-head"><span class="dot"></span>SSG — não usado aqui</div>
+        <div class="step tone-fog">
+              
+              <div class="t">Renderiza uma vez, no build</div>
+              <div class="d">ideal para páginas públicas quase estáticas</div>
+            </div>
+      </div>
+<div class="col tone-fog">
+        <div class="col-head"><span class="dot"></span>ISR — não usado aqui</div>
+        <div class="step tone-fog">
+              
+              <div class="t">Estático, revalida periodicamente</div>
+              <div class="d">meio termo entre SSR e SSG</div>
+            </div>
+      </div></div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout">Next.js resolve dois problemas do React puro: <strong>roteamento</strong> (pastas em <code>app/</code> viram rotas) e <strong>onde renderizar</strong> (servidor por padrão).</div>
+<div class="callout"><code>src/proxy.ts</code> roda antes de qualquer coisa — primeira parada de toda requisição, antes do React entrar em cena.</div>
+<div class="callout">Todo Server Component do ProspFlow usa <strong>SSR</strong>, não SSG — um dashboard de leads muda a cada minuto, não faria sentido gerar uma vez no build.</div>
+<div class="callout">O <strong>RSC payload</strong> é a serialização que acompanha o HTML e diz ao navegador quais partes já estão prontas (Server) e quais precisam hidratar (Client).</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="7_conceitos-react.html"><span class="nav-k">&larr; Anterior</span>Conceitos — Por que React?</a>
+    <a class="next" href="9_conceitos-neon.html"><span class="nav-k">Próximo &rarr;</span>Conceitos — Por que Neon?</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/8_conceitos-nextjs.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>

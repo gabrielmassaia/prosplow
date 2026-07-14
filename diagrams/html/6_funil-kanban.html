@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluxo — Funil Comercial (Kanban) — ProspFlow Diagrams</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="crumbs">
+    <a href="index.html">diagrams</a><span class="sep">/</span><span class="current">funil-kanban</span>
+  </div>
+  <div class="actions">
+    <a class="btn" href="index.html">&#8962; Índice</a>
+    <button class="btn" id="theme-toggle">&#9788; Tema</button>
+  </div>
+</div>
+<main>
+  <div class="hero">
+    <p class="eyebrow">Aula 3 · 06/10</p>
+    <h1 class="title">Fluxo — Funil Comercial (Kanban)</h1>
+    <p class="thesis">Arrastar um card faz <strong>duas escritas</strong>: muda o <code>stage_id</code> e registra uma <code>LeadActivity</code> como histórico da jornada.</p>
+  </div>
+  
+    <div class="panel">
+      <p class="panel-label">Arrastar um card — MoveLead</p>
+      <div class="sequence">
+    <div class="lanes" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="lane-head">Kanban (dnd-kit)</div>
+<div class="lane-head">move-lead action</div>
+<div class="lane-head">MoveLead</div>
+<div class="lane-head">CrmLeadRepo</div>
+<div class="lane-head">ActivityRepo</div>
+<div class="lane-head">Neon</div>
+    </div>
+    <div class="lane-field" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="lifelines" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+        <div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+<div class="lifeline"></div>
+      </div>
+      <div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-self" style="grid-column:1 / 2"><span class="curl">&#8635;</span>onDragEnd(leadId, from, to)</div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:1 / 3">
+        <span class="msg-label">moveLeadAction({ leadId, toStageId })</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:2 / 4">
+        <span class="msg-label">execute({ leadId, toStageId, companyId, userId })</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:3 / 5">
+        <span class="msg-label">findById(leadId, companyId)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:3 / 5">
+        <span class="msg-label">updateStage(leadId, companyId, toStageId)</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:4 / 7">
+        <span class="msg-label">UPDATE crm_leads SET stage_id = …</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:3 / 6">
+        <span class="msg-label">create({ leadId, fromStageId, toStageId, createdBy })</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-r " style="grid-column:5 / 7">
+        <span class="msg-label">INSERT lead_activities</span>
+      </div>
+    </div>
+<div class="msg-row" style="grid-template-columns:repeat(6, minmax(0, 1fr))">
+      <div class="msg-line dir-l tone-return" style="grid-column:1 / 4">
+        <span class="msg-label">{ ok: true } → atualiza card</span>
+      </div>
+    </div>
+    </div>
+  </div>
+    </div>
+    <div class="panel">
+      <p class="panel-label">Bootstrap — SeedFunnelStages</p>
+      <div class="flow"><div class="step tone-signal">
+        
+        <div class="t">Primeiro acesso ao /funil de uma empresa nova</div>
+        
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-amber">
+        
+        <div class="t">Empresa já tem funnel_stages?</div>
+        <div class="d">decisão</div>
+      </div><div class="pipe tone-amber"><span class="label">não</span></div>
+<div class="step tone-signal">
+        
+        <div class="t">SeedFunnelStages.execute(companyId)</div>
+        
+      </div><div class="pipe tone-signal"></div>
+<div class="step tone-ok">
+        
+        <div class="t">INSERT das 8 etapas padrão</div>
+        <div class="d">kind: normal / won / lost / triage</div>
+      </div></div>
+    </div>
+    <div class="reading">
+    <h2>Como ler este diagrama</h2>
+    <div class="callout">Duas escritas em uma ação: <code>UPDATE</code> (posição atual) + <code>INSERT</code> (histórico) — é o que alimenta a aba "Histórico" do <code>LeadDrawer</code>.</div>
+<div class="callout"><code>fromStageId</code> pode ser nulo — a primeira atividade de um lead criado direto numa coluna não tem "de onde veio".</div>
+<div class="callout">O bootstrap hoje é <em>lazy</em> (roda ao abrir <code>/funil</code>) — a Aula 4 move esse gatilho para o cadastro/primeiro login.</div>
+<div class="callout"><code>stageKind</code> marca quais colunas são estados finais (won/lost) vs. estágios normais — relevante para métricas futuras de conversão.</div>
+  </div>
+  
+  <div class="pagenav">
+    <a href="5_prospeccao-campanha.html"><span class="nav-k">&larr; Anterior</span>Fluxo — Prospecção (Campanha)</a>
+    <a class="next" href="7_conceitos-react.html"><span class="nav-k">Próximo &rarr;</span>Conceitos — Por que React?</a>
+  </div>
+</main>
+<footer class="credits">ProspFlow — diagrams/html — gerado a partir de diagrams/6_funil-kanban.md</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>
