@@ -183,7 +183,7 @@ export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasC
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className="overflow-x-auto rounded-xl border border-border/60 bg-card shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>
@@ -234,7 +234,7 @@ export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasC
                         <Link
                           href={`/prospeccao/campanhas/${c.id}`}
                           title="Ver detalhes"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-all hover:bg-muted hover:text-foreground"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-colors hover:bg-accent hover:text-foreground"
                         >
                           <Eye className="h-4 w-4" />
                         </Link>

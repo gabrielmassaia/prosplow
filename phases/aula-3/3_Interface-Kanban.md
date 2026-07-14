@@ -153,7 +153,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function LeadCard({ lead }: { lead: CrmLead }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className="rounded-lg border border-border/60 bg-card p-3.5 shadow-sm">
       <div className="mb-1.5 flex items-center gap-1.5">
         {lead.origin === "prospecting" ? (
           <Target className="h-3.5 w-3.5 text-blue-500" />
@@ -186,7 +186,7 @@ function LeadCard({ lead }: { lead: CrmLead }) {
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-emerald-600 hover:bg-emerald-50"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-emerald-600 transition-colors hover:bg-emerald-50"
           >
             <MessageCircle className="h-3.5 w-3.5" />
           </a>
@@ -204,7 +204,7 @@ function DraggableLeadCard({ lead, onClick }: { lead: CrmLead; onClick: () => vo
       {...listeners}
       {...attributes}
       onClick={onClick}
-      className={`cursor-pointer ${isDragging ? "opacity-30" : ""}`}
+      className={`cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md ${isDragging ? "opacity-30" : ""}`}
     >
       <LeadCard lead={lead} />
     </div>
@@ -226,8 +226,8 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-72 shrink-0 flex-col rounded-xl border bg-muted/20 ${STAGE_KIND_BORDER_CLASSES[stage.kind]} ${
-        isOver ? "ring-2 ring-indigo-300 bg-indigo-50" : ""
+      className={`flex w-72 shrink-0 flex-col rounded-xl border bg-muted/40 transition-colors ${STAGE_KIND_BORDER_CLASSES[stage.kind]} ${
+        isOver ? "ring-2 ring-primary/40 bg-primary/5" : ""
       }`}
     >
       <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
@@ -247,7 +247,7 @@ function KanbanColumn({
           {formatBRL(total)}
         </p>
       )}
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
+      <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-2.5">
         {leads.map((lead) => (
           <DraggableLeadCard key={lead.id} lead={lead} onClick={() => onSelect(lead)} />
         ))}
@@ -568,7 +568,7 @@ export function FunilContent({ initialStages, initialLeads }: FunilContentProps)
                       {[...(activities[selected.id] ?? [])].reverse().map((activity) => (
                         <div
                           key={activity.id}
-                          className="rounded-lg border border-border bg-muted/30 p-3"
+                          className="rounded-lg border border-border/60 bg-muted/40 p-3"
                         >
                           <p className="text-sm text-foreground">{activity.description}</p>
                           <p className="mt-1 text-xs text-muted-foreground">
