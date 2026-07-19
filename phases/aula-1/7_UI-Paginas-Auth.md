@@ -200,7 +200,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 
-import { login } from "@/app/actions/auth/login";
+import { loginAction } from "@/app/actions/auth/login";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -217,9 +217,9 @@ export function LoginForm() {
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
-    const result = await login({
-      email: form.get("email") as string,
-      password: form.get("password") as string,
+    const result = await loginAction({
+      email: String(form.get("email") ?? ""),
+      password: String(form.get("password") ?? ""),
     });
 
     setLoading(false);
@@ -323,8 +323,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 
-import { login } from "@/app/actions/auth/login";
-import { signup } from "@/app/actions/auth/signup";
+import { loginAction } from "@/app/actions/auth/login";
+import { signupAction } from "@/app/actions/auth/signup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -341,12 +341,12 @@ export function RegisterForm() {
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
-    const name = form.get("name") as string;
-    const email = form.get("email") as string;
-    const password = form.get("password") as string;
-    const companyName = form.get("companyName") as string;
+    const name = String(form.get("name") ?? "");
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("password") ?? "");
+    const companyName = String(form.get("companyName") ?? "");
 
-    const result = await signup({ name, email, password, companyName });
+    const result = await signupAction({ name, email, password, companyName });
 
     if (!result.ok) {
       setError(result.error);
@@ -354,7 +354,7 @@ export function RegisterForm() {
       return;
     }
 
-    const loginResult = await login({ email, password });
+    const loginResult = await loginAction({ email, password });
 
     setLoading(false);
 

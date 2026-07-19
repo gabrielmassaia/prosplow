@@ -1,9 +1,8 @@
-import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { db } from "@/infrastructure/db";
-import { companiesTable, companyMembersTable } from "@/infrastructure/db/schema";
+import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
 import { auth } from "@/lib/auth";
 
 export async function requireUser() {
@@ -29,20 +28,12 @@ export async function redirectIfAuthenticated(destination = "/prospeccao") {
 }
 
 export async function requireCompany(userId: string) {
-  const result = await db
-    .select({
-      id: companiesTable.id,
-      name: companiesTable.name,
-      slug: companiesTable.slug,
-    })
-    .from(companyMembersTable)
-    .innerJoin(companiesTable, eq(companyMembersTable.companyId, companiesTable.id))
-    .where(eq(companyMembersTable.userId, userId))
-    .limit(1);
+  const companyRepo = new DrizzleCompanyRepository(db);
+  const company = await companyRepo.findByUserId(userId);
 
-  if (!result[0]) {
+  if (!company) {
     redirect("/login");
   }
 
-  return { companyId: result[0].id, company: result[0] };
+  return { companyId: company.id, company };
 }
