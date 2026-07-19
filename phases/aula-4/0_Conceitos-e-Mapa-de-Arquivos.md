@@ -24,7 +24,7 @@
 **Implementado nesta fase:**
 1. Seed automático das etapas do funil na criação da empresa
 2. `generateMetadata()` no dashboard (única página que faltava)
-3. `error.tsx` e `not-found.tsx` globais
+3. `error.tsx` e `not-found.tsx` globais + `error.tsx` do segmento protegido
 4. Validação real de sessão no Proxy (Next.js 16)
 
 ---
@@ -45,7 +45,9 @@
 
 O SPEC original falava em "seed no primeiro login". Investigando o código, uma empresa só é criada em **um único lugar**: `CreateUserWithCompany.execute()` (`src/use-cases/auth/CreateUserWithCompany.ts`), chamado pela action de cadastro. Não existe (nem esta fase cria) um fluxo de múltiplas empresas por usuário, então "primeiro login" e "momento da criação da empresa" são, na prática, a mesma coisa. Em vez de configurar um `databaseHooks` novo no Better Auth (`src/lib/auth.ts`) só para replicar esse único ponto, o seed foi chamado diretamente logo depois que `companyRepo.create(...)` retorna a empresa criada — menos código, mesmo efeito, sem tocar na configuração do Better Auth.
 
-O seed lazy que já existia desde a Fase 3, dentro de `getFunilBootstrapAction`, **continua no código** — agora é uma segunda camada de proteção, útil para as empresas de teste já existentes no banco antes desta mudança (que nunca passaram pelo novo fluxo de cadastro). `SeedFunnelStages.execute()` já é idempotente (`countByCompany` antes de inserir), então não há risco de duplicar etapas mesmo rodando duas vezes.
+O seed lazy que já existia desde a Fase 3, agora no **Data Loader da página do funil** (`funil/page.tsx`, leitura direta no Server Component), **continua no código** — é uma segunda camada de proteção, útil para as empresas de teste já existentes no banco antes desta mudança (que nunca passaram pelo novo fluxo de cadastro). `SeedFunnelStages.execute()` já é idempotente (`countByCompany` antes de inserir), então não há risco de duplicar etapas mesmo rodando duas vezes.
+
+> **Nota de arquitetura (decisão pragmática):** `CreateUserWithCompany` importa o Better Auth (`auth`) concreto em vez de uma interface de domínio. É uma exceção consciente ao DIP: criar usuário é uma fronteira de framework (o Better Auth É a regra de hash/sessão/verificação), e abstraí-lo atrás de um `IAuthService` só recriaria a API dele sem ganho real. Toda a persistência de domínio (empresa, membro, funil) continua atrás de interfaces injetadas. A decisão está comentada no topo do arquivo.
 
 ### Next.js 16 renomeou `middleware.ts` para "Proxy" — e ele sempre roda em Node.js
 
@@ -70,6 +72,7 @@ Isso adiciona uma consulta ao banco em toda requisição às rotas protegidas. P
 | `src/app/(protected)/prospeccao/page.tsx` | Modificar | Adiciona `generateMetadata()` |
 | `src/app/error.tsx` | Criar | Página de erro global (Client Component) |
 | `src/app/not-found.tsx` | Criar | Página 404 global |
+| `src/app/(protected)/error.tsx` | Criar | Error boundary do segmento protegido (mantém a shell/sidebar) |
 | `src/proxy.ts` | Modificar | Troca checagem de cookie por `auth.api.getSession()` real |
 | `docs/SPEC.md` | Modificar (já feito antes desta fase) | Escopo da Fase 4 realinhado |
 

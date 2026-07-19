@@ -4,13 +4,34 @@
 
 ## Task 5: Verificação final
 
-- [x] `npm run build` — sem erros de TypeScript/ESLint.
-- [x] `npx eslint` nos arquivos novos/modificados desta fase — zero erros/warnings.
-- [x] Smoke test com o servidor de dev: cookie de sessão inválido (`better-auth.session_token=garbage-invalid-token`) em `/prospeccao` → redireciona para `/login` (antes, um cookie com qualquer valor passava).
-- [x] Sem cookie nenhum em `/funil` → redireciona para `/login` (comportamento já esperado, continua funcionando).
+- [ ] `npm run build` — sem erros de TypeScript/ESLint.
+- [ ] `npx eslint` nos arquivos novos/modificados desta fase — zero erros/warnings.
+- [ ] Cookie de sessão inválido (`better-auth.session_token=garbage-invalid-token`) em `/prospeccao` → redireciona para `/login` (antes, um cookie com qualquer valor passava).
+- [ ] Sem cookie nenhum em `/funil` → redireciona para `/login`.
 - [ ] **Manual, com um cadastro novo** (não automatizável nesta sessão via curl, pois passa por Server Action do formulário de registro): criar uma conta nova em `/register` e confirmar, via query direta no Neon, que `funnel_stages` já tem 8 linhas para a empresa recém-criada **antes** de visitar `/funil` pela primeira vez.
 - [ ] **Manual**: acessar uma rota autenticada inexistente (ex: `/prospeccao/rota-que-nao-existe`) e confirmar que `not-found.tsx` renderiza (o teste via curl sem sessão sempre cai no redirect do Proxy antes de chegar no roteamento do Next, então não dá para verificar isso sem uma sessão real).
-- [ ] **Manual**: forçar um erro temporário em alguma página (ex: um `throw new Error("teste")` no topo de um Server Component) e confirmar que `error.tsx` renderiza com o botão "Tentar novamente" funcional — depois remover o throw.
+- [ ] **Manual**: forçar um erro temporário numa página **dentro de `(protected)`** (ex: `throw new Error("teste")` no topo de um Server Component) e confirmar que o `(protected)/error.tsx` renderiza **com a sidebar ainda visível** e o botão "Tentar novamente" funcional — depois remover o throw.
+
+---
+
+## Commits sugeridos da fase (na branch `aula-4`)
+
+A Aula 4 nasce da `aula-3` (`git switch -c aula-4 aula-3`) e é onde as fases anteriores se juntam. Commit por funcionalidade:
+
+```bash
+git switch -c aula-4 aula-3
+
+# 1_Seed-Automatico-no-Cadastro.md
+git add . && git commit -m "feat: seed das etapas do funil no cadastro (CreateUserWithCompany)"
+
+# 2_Metadata-Error-e-NotFound.md
+git add . && git commit -m "feat: generateMetadata no dashboard + error/not-found globais e do segmento"
+
+# 3_Proxy-Validacao-de-Sessao.md
+git add . && git commit -m "feat: proxy valida sessão de verdade (getSession), não só o cookie"
+```
+
+Ao final, `aula-1` é ancestral de `aula-2`, de `aula-3`, de `aula-4` — o histórico segue em uma direção só, exatamente como as lives são gravadas.
 
 ---
 
