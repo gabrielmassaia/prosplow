@@ -52,7 +52,7 @@ Usamos `PointerSensor` com `activationConstraint: { distance: 5 }`: sem isso, qu
 
 ### Por que o seed das 8 etapas é "lazy" (e não no cadastro da empresa)
 
-O SPEC (Fase 4) prevê "seed automático no primeiro login de uma empresa nova" — mas isso implica um hook de login que ainda não existe. Em vez de antecipar essa peça de infraestrutura (fora de escopo da Fase 3) ou mexer em `CreateUserWithCompany` (que já está estável desde a Fase 1), o seed roda dentro da própria Server Action de bootstrap do funil: `getFunilBootstrapAction` verifica `stageRepo.countByCompany(companyId)` e, se for zero, dispara `SeedFunnelStages` antes de buscar os leads. Isso é idempotente (a checagem de contagem evita duplicar) e funciona tanto para empresas novas quanto para as já existentes das Fases 1/2 que nunca tiveram etapas. A Fase 4 pode mover esse gatilho para um hook de login sem quebrar nada — a chamada lazy continua sendo uma segunda camada de proteção.
+O SPEC (Fase 4) prevê "seed automático no primeiro login de uma empresa nova" — mas isso implica um hook de login que ainda não existe. Em vez de antecipar essa peça de infraestrutura (fora de escopo da Fase 3) ou mexer em `CreateUserWithCompany` (que já está estável desde a Fase 1), o seed roda no **Data Loader da página do funil** (Server Component, leitura direta): antes de listar os leads, ele chama `SeedFunnelStages`, que verifica `stageRepo.countByCompany(companyId)` e, se for zero, cria as 8 etapas. Isso é idempotente (a checagem de contagem evita duplicar) e funciona tanto para empresas novas quanto para as já existentes das Fases 1/2 que nunca tiveram etapas. A Fase 4 pode mover esse gatilho para o cadastro sem quebrar nada — a chamada lazy continua sendo uma segunda camada de proteção.
 
 ### `numeric` do Postgres via Drizzle
 
@@ -80,15 +80,14 @@ A coluna `crm_leads.value` é `numeric(10,2)`. O driver `node-postgres` retorna 
 | `src/use-cases/funil/CreateCrmLead.ts` | Criar | Cria lead manual + registra atividade de criação |
 | `src/use-cases/funil/MoveLead.ts` | Criar | Move lead entre etapas + registra atividade |
 | `src/use-cases/funil/UpdateCrmLead.ts` | Criar | Edita dados do lead (nunca `stageId`) |
-| `src/use-cases/funil/ConvertProspectingLead.ts` | Criar | Converte `ProspectingLead` em `CrmLead` |
-| `src/app/actions/funil/get-funil-bootstrap.ts` | Criar | Server Action: bootstrap de leitura + seed lazy |
+| `src/use-cases/funil/ConvertProspectingLead.ts` | Criar | Converte `ProspectingLead` em `CrmLead` (seed + escolha da etapa + nicho) |
 | `src/app/actions/funil/create-crm-lead.ts` | Criar | Server Action: criar lead manual |
 | `src/app/actions/funil/move-lead.ts` | Criar | Server Action: mover lead de etapa |
 | `src/app/actions/funil/update-crm-lead.ts` | Criar | Server Action: atualizar dados do lead |
 | `src/app/actions/funil/get-lead-activities.ts` | Criar | Server Action: histórico sob demanda |
-| `src/app/actions/leads/convert-prospecting-lead.ts` | Criar | Server Action: converter lead de prospecção em CRM |
-| `src/app/actions/leads/get-leads-bootstrap.ts` | Modificar | Retornar também `convertedProspectingLeadIds` |
-| `src/app/(protected)/funil/page.tsx` | Criar | Server Component thin: `generateMetadata` + `BasePageLayout` + `Suspense` + Data Loader |
+| `src/app/actions/leads/convert-prospecting-lead.ts` | Criar | Server Action fina: converter lead de prospecção em CRM |
+| `src/app/(protected)/prospeccao/leads/page.tsx` | Modificar | Data Loader lê também `convertedProspectingLeadIds` (direto do repo) |
+| `src/app/(protected)/funil/page.tsx` | Criar | Server Component thin: Data Loader lê direto + seed lazy |
 | `src/app/(protected)/funil/_components/FunilContent.tsx` | Criar | Client Component: Kanban, drag-and-drop, drawer, criação de lead |
 | `src/app/(protected)/funil/_components/FunilContentLoader.tsx` | Criar | Wrapper `"use client"` que faz o `dynamic(..., { ssr: false })` de `FunilContent` — obrigatório porque `page.tsx` é Server Component e o Next.js 16 não permite `ssr: false` fora de um Client Component |
 | `src/app/(protected)/prospeccao/leads/_components/LeadsContent.tsx` | Modificar | Botão "Converter para CRM" no sheet de detalhe |

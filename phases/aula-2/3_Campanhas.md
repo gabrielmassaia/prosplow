@@ -216,8 +216,6 @@ export class OverpassGeoService implements IGeoService {
     lines.push(");", "out tags center qt 200;");
     const query = lines.join("\n");
 
-    console.log("[OverpassGeoService] query:", query);
-
     const ENDPOINTS = [
       "https://overpass-api.de/api/interpreter",
       "https://overpass.kumi.systems/api/interpreter",
@@ -235,7 +233,6 @@ export class OverpassGeoService implements IGeoService {
     for (const endpoint of ENDPOINTS) {
       let res: Response;
       try {
-        console.log(`[OverpassGeoService] trying ${endpoint}`);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 35_000);
         res = await fetch(endpoint, {
@@ -273,10 +270,6 @@ export class OverpassGeoService implements IGeoService {
       }
 
       const withName = data.elements.filter((el) => el.tags?.name);
-      console.log(
-        `[OverpassGeoService] total=${data.elements.length} withName=${withName.length}`,
-        withName.slice(0, 3).map((el) => ({ name: el.tags?.name, amenity: el.tags?.amenity, shop: el.tags?.shop }))
-      );
 
       // Limite aplicado aqui, depois de filtrar por nome
       return withName.slice(0, params.maxResults).map((el) => {
@@ -407,8 +400,8 @@ export class RunCampaign {
     const niche = await this.nicheRepo.findById(campaign.nicheId, companyId);
     if (!niche) return { ok: false, error: "Nicho não encontrado" };
 
-    await this.campaignRepo.updateStatus(campaignId, companyId, "running");
-
+    // O status "running" já foi marcado pela action (runCampaignAction) antes do after(),
+    // para o cliente ver imediatamente via polling. Aqui só cuidamos de completed/failed.
     try {
       // IA lê o nome + descrição do nicho e gera as tags OSM adequadas.
       // Não é necessário preencher keywords manualmente — o nome do nicho já é suficiente.
@@ -573,7 +566,7 @@ export async function runCampaignAction(campaignId: string) {
 }
 ```
 
-**Polling no cliente (`CampanhasContent.tsx` e `CampanhaDetailContent.tsx`, ver Tasks 15 e 16):** enquanto uma campanha está `running`, o Client Component chama a Server Action de bootstrap diretamente a cada 3s — sem rota REST:
+**Polling no cliente (`CampanhasContent.tsx` e `CampanhaDetailContent.tsx`, ver Tasks 15 e 16):** enquanto uma campanha está `running`, o Client Component chama uma Server Action de **leitura** a cada 3s — este é o caso em que a leitura parte do browser (o navegador não fala com o banco), então precisa de uma Server Action (não é a carga inicial, que roda direto no Server Component):
 
 ```typescript
 // Ativa enquanto qualquer campanha estiver com status "running"
@@ -582,7 +575,7 @@ useEffect(() => {
   if (!hasRunning) return;
 
   const timer = setInterval(async () => {
-    const { campaigns: fresh } = await getCampanhasBootstrapAction();
+    const fresh = await listCampaignsAction();
     setCampaigns((prev) => {
       for (const c of fresh) {
         const old = prev.find((p) => p.id === c.id);
@@ -599,62 +592,126 @@ useEffect(() => {
 }, [campaigns]);
 ```
 
-- [ ] **Step 10: Criar `src/app/actions/campanhas/get-campanhas-bootstrap.ts`**
+- [ ] **Step 10: Criar `src/app/actions/campanhas/list-campaigns.ts`**
+
+> Leitura de campanhas **disparada pelo client** (polling). A carga inicial da página não usa esta action — o Server Component lê direto (Task 15). Esta existe só porque o polling parte do browser.
 
 ```typescript
 "use server";
 
+import type { Campaign } from "@/domain/repositories/ICampaignRepository";
 import { requireCompany, requireUser } from "@/lib/tenant";
 import { db } from "@/infrastructure/db";
 import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
-import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 
-export async function getCampanhasBootstrapAction() {
+export async function listCampaignsAction(): Promise<Campaign[]> {
   const user = await requireUser();
   const { companyId } = await requireCompany(user.id);
 
   const campaignRepo = new DrizzleCampaignRepository(db);
-  const nicheRepo = new DrizzleNicheRepository(db);
-
-  const [campaigns, niches] = await Promise.all([
-    campaignRepo.findAllByCompany(companyId),
-    nicheRepo.findAllByCompany(companyId),
-  ]);
-
-  return { campaigns, niches };
+  return campaignRepo.findAllByCompany(companyId);
 }
 ```
 
-Essa mesma action também é usada pelo Client Component para o **polling** de status enquanto uma campanha está `running` — chamada direta do client, sem precisar de rota REST.
+- [ ] **Step 11: Criar `src/app/actions/campanhas/get-campaign-detail.ts`**
 
-- [ ] **Step 11: Criar `src/app/actions/campanhas/get-campanha-detail-bootstrap.ts`**
+> Mesmo caso: leitura do detalhe **disparada pelo client** (polling na página de detalhe). Retorna o par campanha + leads no shape `{ ok, data }`.
 
 ```typescript
 "use server";
 
+import type { Campaign } from "@/domain/repositories/ICampaignRepository";
+import type { Lead } from "@/domain/repositories/ILeadRepository";
 import { requireCompany, requireUser } from "@/lib/tenant";
 import { db } from "@/infrastructure/db";
 import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
 import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
-import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 
-export async function getCampanhaDetailBootstrapAction(campaignId: string) {
+type Result = { ok: true; data: { campaign: Campaign; leads: Lead[] } } | { ok: false };
+
+export async function getCampaignDetailAction(campaignId: string): Promise<Result> {
   const user = await requireUser();
   const { companyId } = await requireCompany(user.id);
 
   const campaignRepo = new DrizzleCampaignRepository(db);
   const campaign = await campaignRepo.findById(campaignId, companyId);
-  if (!campaign) return { ok: false as const, error: "Campanha não encontrada" };
+  if (!campaign) return { ok: false };
 
-  const nicheRepo = new DrizzleNicheRepository(db);
   const leadRepo = new DrizzleLeadRepository(db);
+  const leads = await leadRepo.findByCampaign(campaignId, companyId);
 
-  const [niche, leads] = await Promise.all([
-    nicheRepo.findById(campaign.nicheId, companyId),
-    leadRepo.findByCampaign(campaignId, companyId),
-  ]);
+  return { ok: true, data: { campaign, leads } };
+}
+```
 
-  return { ok: true as const, campaign, niche, leads };
+- [ ] **Step 12: Criar `src/app/actions/campanhas/resolve-cep.ts`**
+
+> Geocodificação do CEP **no servidor**. O formulário de campanha só pede o CEP; o servidor consulta o ViaCEP (cidade/UF) e o Nominatim (lat/lon). Antes essas duas chamadas eram `fetch()` no browser — trazê-las para uma Server Action tira as APIs externas do cliente e permite **validar a resposta externa com Zod** (JSON de terceiro nunca é confiável). Exige sessão: geocodificar não deve ser um endpoint público aberto.
+
+```typescript
+"use server";
+
+import { z } from "zod";
+
+import { requireCompany, requireUser } from "@/lib/tenant";
+
+const cepSchema = z
+  .string()
+  .transform((s) => s.replace(/\D/g, ""))
+  .refine((s) => s.length === 8, "CEP deve ter 8 dígitos");
+
+const viacepSchema = z.object({
+  localidade: z.string().optional(),
+  uf: z.string().optional(),
+  logradouro: z.string().optional(),
+  erro: z.boolean().optional(),
+});
+
+const nominatimSchema = z.array(z.object({ lat: z.string(), lon: z.string() }));
+
+type CepData = { city: string; state: string; street: string; latitude: number; longitude: number };
+type Result = { ok: true; data: CepData } | { ok: false; error: string };
+
+export async function resolveCepAction(cep: string): Promise<Result> {
+  const user = await requireUser();
+  await requireCompany(user.id);
+
+  const parsed = cepSchema.safeParse(cep);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const digits = parsed.data;
+
+  try {
+    const viacepRes = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+    const viacep = viacepSchema.parse(await viacepRes.json());
+    if (viacep.erro || !viacep.localidade || !viacep.uf) {
+      return { ok: false, error: "CEP não encontrado" };
+    }
+
+    const city = viacep.localidade;
+    const state = viacep.uf;
+    const street = viacep.logradouro ?? "";
+
+    const query = encodeURIComponent(`${street || city}, ${city}, ${state}, Brazil`);
+    const nominatimRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
+      { headers: { "Accept-Language": "pt-BR", "User-Agent": "ProspFlow/1.0" } }
+    );
+    const nominatim = nominatimSchema.parse(await nominatimRes.json());
+    const first = nominatim[0];
+
+    return {
+      ok: true,
+      data: {
+        city,
+        state,
+        street,
+        latitude: first ? parseFloat(first.lat) : 0,
+        longitude: first ? parseFloat(first.lon) : 0,
+      },
+    };
+  } catch {
+    return { ok: false, error: "Erro ao buscar CEP" };
+  }
 }
 ```
 
@@ -663,7 +720,7 @@ export async function getCampanhaDetailBootstrapAction(campaignId: string) {
 
 ## Task 15: Campanhas — `src/app/(protected)/prospeccao/campanhas/page.tsx`
 
-> Segue o padrão thin-page + Suspense + bootstrap action + `_components/`.
+> Segue o padrão thin-page + Suspense + Data Loader lendo direto + `_components/`.
 
 - [ ] **Step 1: Criar `src/app/(protected)/prospeccao/campanhas/page.tsx`**
 
@@ -671,7 +728,10 @@ export async function getCampanhaDetailBootstrapAction(campaignId: string) {
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { getCampanhasBootstrapAction } from "@/app/actions/campanhas/get-campanhas-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -692,14 +752,24 @@ export default function CampanhasPage() {
 }
 
 async function CampanhasDataLoader() {
-  const { campaigns, niches } = await getCampanhasBootstrapAction();
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const nicheRepo = new DrizzleNicheRepository(db);
+
+  const [campaigns, niches] = await Promise.all([
+    campaignRepo.findAllByCompany(companyId),
+    nicheRepo.findAllByCompany(companyId),
+  ]);
+
   return <CampanhasContent initialCampaigns={campaigns} initialNiches={niches} />;
 }
 ```
 
 - [ ] **Step 2: Criar `src/app/(protected)/prospeccao/campanhas/_components/CampanhasContent.tsx`**
 
-> **Polling sem rota REST:** enquanto alguma campanha está `running` (a busca roda em background via `after()`), o Client Component chama `getCampanhasBootstrapAction()` diretamente a cada 3s — Server Actions podem ser invocadas do client livremente, sem precisar existir como rota HTTP.
+> **Polling via Server Action:** enquanto alguma campanha está `running` (a busca roda em background via `after()`), o Client Component chama `listCampaignsAction()` a cada 3s. É leitura disparada pelo browser, então passa por uma Server Action — diferente da carga inicial, que roda direto no Server Component.
 
 ```tsx
 "use client";
@@ -712,7 +782,8 @@ import { toast } from "sonner";
 import type { Campaign } from "@/domain/repositories/ICampaignRepository";
 import type { Niche } from "@/domain/repositories/INicheRepository";
 import { createCampaignAction } from "@/app/actions/campanhas/create-campaign";
-import { getCampanhasBootstrapAction } from "@/app/actions/campanhas/get-campanhas-bootstrap";
+import { listCampaignsAction } from "@/app/actions/campanhas/list-campaigns";
+import { resolveCepAction } from "@/app/actions/campanhas/resolve-cep";
 import { runCampaignAction } from "@/app/actions/campanhas/run-campaign";
 import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -771,7 +842,7 @@ export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasC
     if (!hasRunning) return;
 
     const timer = setInterval(async () => {
-      const { campaigns: fresh } = await getCampanhasBootstrapAction();
+      const fresh = await listCampaignsAction();
       setCampaigns((prev) => {
         for (const c of fresh) {
           const old = prev.find((p) => p.id === c.id);
@@ -791,26 +862,16 @@ export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasC
   async function fetchCep(digits: string) {
     setCepLoading(true);
     setCepError("");
-    try {
-      const viacepRes = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
-      const viacepData = await viacepRes.json();
-      if (viacepData.erro) { setCepError("CEP não encontrado"); return; }
-      const city: string = viacepData.localidade;
-      const state: string = viacepData.uf;
-      const query = encodeURIComponent(`${viacepData.logradouro || city}, ${city}, ${state}, Brazil`);
-      const nominatimRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
-        { headers: { "Accept-Language": "pt-BR" } }
-      );
-      const nominatimData = await nominatimRes.json();
-      const lat = nominatimData[0] ? parseFloat(nominatimData[0].lat) : 0;
-      const lon = nominatimData[0] ? parseFloat(nominatimData[0].lon) : 0;
-      setForm((f) => ({ ...f, city, state, latitude: lat, longitude: lon }));
-    } catch {
-      setCepError("Erro ao buscar CEP");
-    } finally {
-      setCepLoading(false);
+    // Geocodificação roda no servidor (resolveCepAction): ViaCEP + Nominatim ficam
+    // fora do browser, e a resposta externa já chega validada por Zod.
+    const result = await resolveCepAction(digits);
+    setCepLoading(false);
+    if (!result.ok) {
+      setCepError(result.error);
+      return;
     }
+    const { city, state, latitude, longitude } = result.data;
+    setForm((f) => ({ ...f, city, state, latitude, longitude }));
   }
 
   async function handleCreate() {
@@ -1041,7 +1102,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
-import { getCampanhaDetailBootstrapAction } from "@/app/actions/campanhas/get-campanha-detail-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -1068,24 +1133,36 @@ export default async function CampanhaDetailPage({ params }: PageProps) {
 }
 
 async function CampanhaDetailDataLoader({ campaignId }: { campaignId: string }) {
-  const result = await getCampanhaDetailBootstrapAction(campaignId);
-  if (!result.ok) redirect("/prospeccao/campanhas");
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const campaign = await campaignRepo.findById(campaignId, companyId);
+  if (!campaign) redirect("/prospeccao/campanhas");
+
+  const nicheRepo = new DrizzleNicheRepository(db);
+  const leadRepo = new DrizzleLeadRepository(db);
+
+  const [niche, leads] = await Promise.all([
+    nicheRepo.findById(campaign.nicheId, companyId),
+    leadRepo.findByCampaign(campaignId, companyId),
+  ]);
 
   return (
     <CampanhaDetailContent
-      initialCampaign={result.campaign}
-      initialNiche={result.niche}
-      initialLeads={result.leads}
+      initialCampaign={campaign}
+      initialNiche={niche}
+      initialLeads={leads}
     />
   );
 }
 ```
 
-**Por que `redirect()` em vez do `router.replace` client-side de antes:** a checagem de tenant (`campaignRepo.findById(campaignId, companyId)` retornando `null`) agora acontece no servidor, dentro da Server Action de bootstrap — então o redirecionamento também é feito no servidor, antes de qualquer HTML chegar ao client.
+**Por que `redirect()` no servidor:** a checagem de tenant (`campaignRepo.findById(campaignId, companyId)` retornando `null`) acontece no próprio Server Component, então o redirecionamento é feito no servidor, antes de qualquer HTML chegar ao client.
 
 - [ ] **Step 2: Criar `src/app/(protected)/prospeccao/campanhas/[id]/_components/CampanhaDetailContent.tsx`**
 
-> **Polling sem rota REST:** o `useEffect` de polling agora chama `getCampanhaDetailBootstrapAction(campaign.id)` diretamente, em vez de `fetch(`/api/campanhas/${id}`)`.
+> **Polling via Server Action:** o `useEffect` de polling chama `getCampaignDetailAction(campaign.id)` (leitura disparada pelo client), em vez de `fetch("/api/campanhas/${id}")`.
 
 ```tsx
 "use client";
@@ -1099,8 +1176,9 @@ import { toast } from "sonner";
 import type { Campaign } from "@/domain/repositories/ICampaignRepository";
 import type { Lead } from "@/domain/repositories/ILeadRepository";
 import type { Niche } from "@/domain/repositories/INicheRepository";
-import { getCampanhaDetailBootstrapAction } from "@/app/actions/campanhas/get-campanha-detail-bootstrap";
+import { getCampaignDetailAction } from "@/app/actions/campanhas/get-campaign-detail";
 import { runCampaignAction } from "@/app/actions/campanhas/run-campaign";
+import { isQualifiedLead } from "@/domain/lead-qualification";
 import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -1152,13 +1230,13 @@ export function CampanhaDetailContent({
   useEffect(() => {
     if (campaign.status !== "running") return;
     const timer = setInterval(async () => {
-      const result = await getCampanhaDetailBootstrapAction(campaign.id);
+      const result = await getCampaignDetailAction(campaign.id);
       if (!result.ok) return;
-      const fresh = result.campaign;
+      const fresh = result.data.campaign;
       if (fresh.status === "completed") {
         clearInterval(timer);
         setCampaign(fresh);
-        setLeads(result.leads);
+        setLeads(result.data.leads);
         setTimeout(() => toast.success(`${fresh.totalFound} leads encontrados`), 0);
       } else if (fresh.status === "failed") {
         clearInterval(timer);
@@ -1177,7 +1255,7 @@ export function CampanhaDetailContent({
     setRunning(false);
   }
 
-  const qualified = leads.filter((l) => l.score >= 70).length;
+  const qualified = leads.filter((l) => isQualifiedLead(l.score)).length;
   const whatsappLikely = leads.filter(
     (l) => l.whatsappStatus === "probable" || l.whatsappStatus === "confirmed"
   ).length;

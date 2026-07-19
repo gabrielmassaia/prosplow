@@ -7,7 +7,6 @@ import { DrizzleFunnelStageRepository } from "@/infrastructure/repositories/Driz
 import { DrizzleLeadActivityRepository } from "@/infrastructure/repositories/DrizzleLeadActivityRepository";
 import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
 import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
-import { SeedFunnelStages } from "@/use-cases/funil/SeedFunnelStages";
 import { ConvertProspectingLead } from "@/use-cases/funil/ConvertProspectingLead";
 
 export async function convertProspectingLeadAction(prospectingLeadId: string) {
@@ -20,24 +19,12 @@ export async function convertProspectingLeadAction(prospectingLeadId: string) {
   const stageRepo = new DrizzleFunnelStageRepository(db);
   const leadActivityRepo = new DrizzleLeadActivityRepository(db);
 
-  const seedResult = await new SeedFunnelStages(stageRepo).execute({ companyId });
-  const stages = seedResult.ok ? seedResult.data : await stageRepo.findAllByCompany(companyId);
-
-  const targetStage =
-    stages.filter((s) => s.kind === "normal").sort((a, b) => a.position - b.position)[0] ??
-    stages.sort((a, b) => a.position - b.position)[0];
-
-  if (!targetStage) return { ok: false as const, error: "Nenhuma etapa de funil disponível" };
-
-  const prospectingLead = await leadRepo.findById(prospectingLeadId, companyId);
-  const niche = prospectingLead ? await nicheRepo.findById(prospectingLead.nicheId, companyId) : null;
-
-  const useCase = new ConvertProspectingLead(crmLeadRepo, leadRepo, leadActivityRepo);
-  return useCase.execute({
-    prospectingLeadId,
-    companyId,
-    nicheName: niche?.name ?? null,
-    targetStageId: targetStage.id,
-    userId: user.id,
-  });
+  const useCase = new ConvertProspectingLead(
+    crmLeadRepo,
+    leadRepo,
+    leadActivityRepo,
+    stageRepo,
+    nicheRepo
+  );
+  return useCase.execute({ prospectingLeadId, companyId, userId: user.id });
 }

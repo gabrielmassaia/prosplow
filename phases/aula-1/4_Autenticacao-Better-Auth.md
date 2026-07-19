@@ -140,12 +140,11 @@ Este arquivo é importado apenas em componentes `"use client"`. Login e cadastro
 Crie `src/lib/tenant.ts`:
 
 ```typescript
-import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { db } from "@/infrastructure/db";
-import { companiesTable, companyMembersTable } from "@/infrastructure/db/schema";
+import { DrizzleCompanyRepository } from "@/infrastructure/repositories/DrizzleCompanyRepository";
 import { auth } from "@/lib/auth";
 
 export async function requireUser() {
@@ -161,24 +160,22 @@ export async function requireUser() {
 }
 
 export async function requireCompany(userId: string) {
-  const result = await db
-    .select({
-      id: companiesTable.id,
-      name: companiesTable.name,
-      slug: companiesTable.slug,
-    })
-    .from(companyMembersTable)
-    .innerJoin(companiesTable, eq(companyMembersTable.companyId, companiesTable.id))
-    .where(eq(companyMembersTable.userId, userId))
-    .limit(1);
+  const companyRepo = new DrizzleCompanyRepository(db);
+  const company = await companyRepo.findByUserId(userId);
 
-  if (!result[0]) {
+  if (!company) {
     redirect("/login");
   }
 
-  return { companyId: result[0].id, company: result[0] };
+  return { companyId: company.id, company };
 }
 ```
+
+> **Por que `requireCompany` usa o repositório e não uma query solta?**
+> O `DrizzleCompanyRepository` (criado em `3_Dominio-e-Repositorios.md`) já tem exatamente
+> essa consulta em `findByUserId`. Reaproveitar o repositório em vez de reescrever o `join`
+> aqui mantém o acesso ao banco concentrado na camada de infraestrutura — o `lib/tenant.ts`
+> orquestra sessão + empresa, mas não conhece tabelas nem Drizzle.
 
 **Por que `requireUser` chama `redirect()` e não retorna null?**
 O `redirect()` do Next.js lança uma exceção especial que aborta a execução do Server Component e envia o cabeçalho HTTP 307. Isso garante que o código depois de `requireUser()` nunca executa se o usuário não estiver autenticado — sem precisar de `if (!user) return` em todo lugar. `requireCompany()` segue a mesma lógica: se não achar empresa vinculada, redireciona em vez de devolver `company: null` — assim nenhuma página protegida precisa tratar o caso "usuário sem empresa".

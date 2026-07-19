@@ -24,7 +24,7 @@ const signupSchema = z.object({
   companyName: z.string().min(2, "Nome da empresa deve ter ao menos 2 caracteres"),
 });
 
-export async function signup(formData: {
+export async function signupAction(formData: {
   name: string;
   email: string;
   password: string;
@@ -44,6 +44,8 @@ export async function signup(formData: {
 ```
 
 Repare como a action é fina: valida o input com Zod, instancia as dependências concretas, passa para o use case, retorna o resultado. Nenhuma lógica de negócio aqui — a validação de formato fica na action (é responsabilidade do controller), as regras de negócio ficam no use case.
+
+> **Convenção de nome:** toda Server Action termina com o sufixo `Action` (`signupAction`, `loginAction`, e mais tarde `createNicheAction`, `moveLeadAction`...). É o que deixa óbvio, em qualquer import de componente, que aquilo é uma função que roda no servidor — e não um helper client qualquer.
 
 ---
 
@@ -65,7 +67,7 @@ const loginSchema = z.object({
   password: z.string().min(1, "Senha obrigatória"),
 });
 
-export async function login(formData: {
+export async function loginAction(formData: {
   email: string;
   password: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {

@@ -9,7 +9,7 @@
 - [ ] **Step 1: Instalar pacotes npm**
 
 ```bash
-npm install leaflet react-leaflet date-fns sonner react-hook-form @hookform/resolvers
+npm install leaflet react-leaflet date-fns sonner
 npm install -D @types/leaflet
 ```
 

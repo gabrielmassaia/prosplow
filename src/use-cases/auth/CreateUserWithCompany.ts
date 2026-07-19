@@ -1,3 +1,9 @@
+// Exceção pragmática ao DIP: este use case depende do Better Auth (`auth`) concreto
+// em vez de uma interface de domínio. Criar um usuário é, na prática, uma fronteira de
+// framework — o Better Auth É a regra de "como um usuário nasce" (hash de senha, sessão,
+// verificação). Abstraí-lo por trás de um IAuthService só recriaria a API do Better Auth
+// sem ganho real de troca de provider. Todo o resto da persistência (empresa, membro,
+// funil) continua atrás de interfaces injetadas.
 import { auth } from "@/lib/auth";
 import type { ICompanyRepository } from "@/domain/repositories/ICompanyRepository";
 import type { IFunnelStageRepository } from "@/domain/repositories/IFunnelStageRepository";
@@ -50,7 +56,7 @@ export class CreateUserWithCompany {
       const company = await this.companyRepo.create({ name: companyName, slug, ownerId: userId });
 
       // 4. Seed das etapas padrão do funil (falha aqui não deve impedir o cadastro —
-      // o bootstrap do funil também seeda de forma lazy como segunda camada de proteção)
+      // o Data Loader do funil também seeda de forma lazy como segunda camada de proteção)
       await new SeedFunnelStages(this.stageRepo).execute({ companyId: company.id });
 
       return { ok: true };

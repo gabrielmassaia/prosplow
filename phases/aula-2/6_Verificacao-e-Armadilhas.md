@@ -171,43 +171,33 @@ O Drizzle usa `sql\`'{}'\`` como default para arrays PostgreSQL. Sem isso, o ban
 ### doublePrecision vs real
 `doublePrecision` (8 bytes) para lat/lng — precisão necessária para coordenadas geográficas. `real` (4 bytes) apenas para rating onde decimais grossos bastam.
 
-### Campos de lat/lon no formulário de campanha → usar CEP
-Expor latitude e longitude como campos numéricos editáveis é inutilizável na prática. A solução implementada usa **ViaCEP + Nominatim** para geocodificação automática:
+### Campos de lat/lon no formulário de campanha → usar CEP (geocodificação no servidor)
+Expor latitude e longitude como campos numéricos editáveis é inutilizável na prática. A solução usa **ViaCEP + Nominatim** — mas a geocodificação roda **no servidor**, dentro de `resolveCepAction`, não no browser:
 
-1. Usuário digita o CEP → `onBlur` dispara `handleCepBlur`
-2. Chamada à ViaCEP (`https://viacep.com.br/ws/{cep}/json/`) retorna cidade, estado e logradouro
-3. Chamada ao Nominatim (`https://nominatim.openstreetmap.org/search`) converte o endereço em lat/lon
-4. Campos `city`, `state`, `latitude`, `longitude` do formulário são preenchidos automaticamente
-5. Cidade e estado ficam editáveis (correção manual possível); lat/lon são exibidos só como confirmação
+1. Usuário digita o CEP e clica em "Buscar" → o Client Component chama `resolveCepAction(cep)`
+2. No servidor: ViaCEP (`/ws/{cep}/json/`) retorna cidade/UF/logradouro; Nominatim converte o endereço em lat/lon
+3. A action valida as respostas externas com Zod e devolve `{ ok, data: { city, state, latitude, longitude } }`
+4. Cidade e estado ficam editáveis; lat/lon são exibidos só como confirmação
 
-**Atenção:** Nominatim tem rate limit de 1 req/s por IP. Em produção com muitos usuários, considere cache ou proxy. Para testes locais não há problema.
+**Por que no servidor e não com `fetch()` no cliente?** Manter as duas chamadas externas fora do browser (a) tira a dependência de provedores de geocodificação do bundle client, (b) permite validar o JSON de terceiro com Zod antes de confiar nele, e (c) segue a regra do projeto de não dar `fetch` externo direto de dentro de um componente. É a mesma disciplina de "toda ida ao mundo externo passa por uma camada do servidor".
 
-**Atenção 2:** `onBlur` no campo de CEP era pouco confiável (não disparava ao pressionar Enter ou navegar com Tab). A solução definitiva foi um botão "Buscar" explícito — mais previsível para o usuário e sem dependência de eventos de foco.
+**Atenção:** Nominatim tem rate limit de 1 req/s por IP. Como agora a chamada sai do servidor (um IP só), em produção com muitos usuários considere cache/proxy — mais um motivo para ter centralizado no backend.
+
+**Atenção 2:** botão "Buscar" explícito em vez de `onBlur` — `onBlur` não disparava ao pressionar Enter ou navegar com Tab.
 
 ```typescript
-// fetchCep — cliente (campanhas/page.tsx)
-// Disparado pelo botão "Buscar" (não onBlur — onBlur é pouco confiável)
-async function fetchCep(digits: string) {
-  setCepLoading(true);
-  setCepError("");
-  try {
-    const viacepData = await fetch(`https://viacep.com.br/ws/${digits}/json/`).then(r => r.json());
-    if (viacepData.erro) { setCepError("CEP não encontrado"); return; }
-    const city: string = viacepData.localidade;
-    const state: string = viacepData.uf;
-    const query = encodeURIComponent(`${viacepData.logradouro || city}, ${city}, ${state}, Brazil`);
-    const nominatimData = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
-      { headers: { "Accept-Language": "pt-BR" } }
-    ).then(r => r.json());
-    const lat = nominatimData[0] ? parseFloat(nominatimData[0].lat) : 0;
-    const lon = nominatimData[0] ? parseFloat(nominatimData[0].lon) : 0;
-    setForm((f) => ({ ...f, city, state, latitude: lat, longitude: lon }));
-  } catch {
-    setCepError("Erro ao buscar CEP");
-  } finally {
-    setCepLoading(false);
-  }
+// resolveCepAction — SERVIDOR (src/app/actions/campanhas/resolve-cep.ts)
+// Respostas externas validadas com Zod; exige sessão.
+const cepSchema = z.string().transform((s) => s.replace(/\D/g, "")).refine((s) => s.length === 8, "CEP deve ter 8 dígitos");
+const viacepSchema = z.object({ localidade: z.string().optional(), uf: z.string().optional(), logradouro: z.string().optional(), erro: z.boolean().optional() });
+const nominatimSchema = z.array(z.object({ lat: z.string(), lon: z.string() }));
+
+export async function resolveCepAction(cep: string) {
+  const user = await requireUser();
+  await requireCompany(user.id);
+  const parsed = cepSchema.safeParse(cep);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0].message };
+  // ...ViaCEP + Nominatim no servidor, validados por Zod, retornando { ok, data }
 }
 ```
 
@@ -216,6 +206,33 @@ O modelo pode retornar texto extra antes/depois do JSON. O `JSON.parse(raw.trim(
 
 ### Route Handlers no Next.js 16
 `params` em Route Handlers é uma `Promise` — sempre `await params` antes de desestruturar.
+
+---
+
+## Commits sugeridos da fase (na branch `aula-2`)
+
+A Aula 2 começa criando a branch `aula-2` **a partir da `aula-1`** (`git switch -c aula-2 aula-1`), para o histórico seguir em uma direção só. Commit por funcionalidade, na ordem dos arquivos desta pasta:
+
+```bash
+git switch -c aula-2 aula-1
+
+# 1_Fundacao-Schema-e-Utilitarios.md
+git add . && git commit -m "feat: schema de prospecção (3 tabelas) + serviço de IA + format.ts"
+
+# 2_Nichos.md
+git add . && git commit -m "feat: CRUD de nichos (domain, infra, use-cases, actions, UI)"
+
+# 3_Campanhas.md
+git add . && git commit -m "feat: campanhas + Overpass + RunCampaign + geocodificação no servidor"
+
+# 4_Leads.md
+git add . && git commit -m "feat: leads com mapa, filtros e diagnóstico/mensagem por IA"
+
+# 5_Dashboard-e-Layout.md
+git add . && git commit -m "feat: dashboard de métricas + sidebar da prospecção"
+```
+
+Padrão de leitura importante desta fase (deixe explícito ao vivo): **a carga inicial de cada página lê direto no Server Component**; Server Actions só aparecem para **escrita** e para o **polling** (leitura disparada pelo client). Não existe `get-*-bootstrap.ts`.
 
 ---
 

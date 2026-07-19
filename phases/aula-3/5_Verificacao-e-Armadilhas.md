@@ -4,11 +4,13 @@
 
 ## Task 12: Verificação final
 
-- [x] `npx drizzle-kit push` — tabelas e enums criados sem prompt destrutivo.
-- [x] `npm run build` — compila sem erros de TypeScript, sem `any`.
-- [x] `npx eslint` nos arquivos novos/modificados da Fase 3 — zero erros/warnings.
-- [x] Smoke test: `/funil` sem sessão redireciona para `/login` (guard de tenant funcionando).
-- [x] **Verificado com uso manual real** (empresa "Teste321"): seed rodou uma única vez (8 linhas, posições 0–7, sem duplicar); conversão de um lead de prospecção ("Marriagge") criou o `CrmLead` corretamente na etapa "Novo" com `origin: "prospecting"` e registrou a atividade "Lead convertido da prospecção"; arrastar o card entre colunas (Novo → Contato Iniciado → Respondeu) atualizou o `stageId` e registrou `LeadActivity` com a descrição correta a cada movimento, confirmado via query direta no Neon.
+- [ ] `npx drizzle-kit push` — tabelas e enums criados sem prompt destrutivo.
+- [ ] `npm run build` — compila sem erros de TypeScript, sem `any`.
+- [ ] `npx eslint` nos arquivos novos/modificados da Fase 3 — zero erros/warnings.
+- [ ] `/funil` sem sessão redireciona para `/login` (guard de tenant funcionando).
+- [ ] Primeira visita a `/funil` de uma empresa nova cria as 8 etapas (posições 0–7) uma única vez, sem duplicar ao recarregar.
+- [ ] Converter um lead de prospecção cria o `CrmLead` na etapa "Novo" com `origin: "prospecting"` e registra a atividade "Lead convertido da prospecção"; o botão fica "Já convertido".
+- [ ] Arrastar um card entre colunas atualiza o `stageId` e registra uma `LeadActivity` com a descrição do movimento; soltar na mesma coluna não gera atividade.
 
 ---
 
@@ -30,7 +32,7 @@ As duas origens de `CrmLead` entram em etapas diferentes por design: leads manua
 Sem `activationConstraint: { distance: 5 }`, todo clique num card (inclusive o que abre o drawer de detalhes) é interpretado como início de drag, e o `onClick` do card nunca dispara.
 
 ### Seed lazy é uma escolha deliberada, não um atalho
-A Fase 4 do SPEC menciona seed automático no primeiro login — isso pressupõe um hook de autenticação que ainda não existe. O seed lazy dentro do bootstrap do funil resolve o problema imediato (empresas sem etapas) sem acoplar a Fase 3 a uma peça de infraestrutura da Fase 4.
+A Fase 4 do SPEC menciona seed automático no cadastro — isso é uma peça da Fase 4. O seed lazy no Data Loader do funil (leitura direta no Server Component) resolve o problema imediato (empresas sem etapas) sem acoplar a Fase 3 a essa peça. Na Fase 4 o seed passa a rodar também no cadastro (`CreateUserWithCompany`), e o lazy continua como segunda camada de proteção.
 
 ### `ssr: false` não pode ficar num Server Component
 **Sintoma:** `npm run dev` sobe, mas `/funil` quebra com `Ecmascript file had an error: "ssr: false" is not allowed with next/dynamic in Server Components. Please move it into a Client Component.`
@@ -39,6 +41,28 @@ A Fase 4 do SPEC menciona seed automático no primeiro login — isso pressupõe
 
 ---
 
+## Commits sugeridos da fase (na branch `aula-3`)
+
+A Aula 3 começa criando a branch `aula-3` **a partir da `aula-2`** (`git switch -c aula-3 aula-2`). Commit por funcionalidade:
+
+```bash
+git switch -c aula-3 aula-2
+
+# 1_Fundacao-Schema-Domain-Infra.md
+git add . && git commit -m "feat: schema do funil (3 tabelas) + domain + repositórios Drizzle"
+
+# 2_Regras-de-Negocio.md
+git add . && git commit -m "feat: use-cases do funil (seed, criar, mover, converter) + actions"
+
+# 3_Interface-Kanban.md
+git add . && git commit -m "feat: kanban com dnd-kit + drawer + criação de lead"
+
+# 4_Integracao-com-Prospeccao.md
+git add . && git commit -m "feat: converter lead de prospecção para o CRM + item de sidebar"
+```
+
+---
+
 ## Próximos passos — Fase 4
 
-Conforme o SPEC (revisado após a Fase 3): `SeedFunnelStages` disparado automaticamente no primeiro login (substituindo/complementando o seed lazy desta fase), `generateMetadata()` nas páginas que ainda faltam (dashboard), `error.tsx`/`not-found.tsx` globais, validação real de sessão no middleware, e rate limiting nas Server Actions que chamam Cloudflare AI. Seletor de empresa e convite de membros por e-mail ficaram fora do escopo desta versão — dependem um do outro e o produto, como construído nas lives, mantém uma empresa por usuário.
+Conforme o SPEC (Fase 4, rescopada): `SeedFunnelStages` disparado no cadastro (`CreateUserWithCompany`), mantendo o seed lazy como segunda camada; `generateMetadata()` nas páginas que faltam (dashboard); `error.tsx`/`not-found.tsx` globais; validação real de sessão no `proxy.ts` (não só presença de cookie); rate limiting nas Server Actions que chamam Cloudflare AI. **Fora de escopo** (não serão implementados nas lives): seletor de empresa e convite de membros por e-mail — a série mantém uma empresa por usuário.

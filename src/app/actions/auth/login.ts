@@ -9,7 +9,7 @@ const loginSchema = z.object({
   password: z.string().min(1, "Senha obrigatória"),
 });
 
-export async function login(formData: {
+export async function loginAction(formData: {
   email: string;
   password: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {

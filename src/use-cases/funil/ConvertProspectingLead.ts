@@ -1,12 +1,13 @@
 import type { CrmLead, ICrmLeadRepository } from "@/domain/repositories/ICrmLeadRepository";
+import type { IFunnelStageRepository } from "@/domain/repositories/IFunnelStageRepository";
 import type { ILeadActivityRepository } from "@/domain/repositories/ILeadActivityRepository";
 import type { ILeadRepository } from "@/domain/repositories/ILeadRepository";
+import type { INicheRepository } from "@/domain/repositories/INicheRepository";
+import { SeedFunnelStages } from "@/use-cases/funil/SeedFunnelStages";
 
 type Input = {
   prospectingLeadId: string;
   companyId: string;
-  nicheName: string | null;
-  targetStageId: string;
   userId: string;
 };
 type Result = { ok: true; data: CrmLead } | { ok: false; error: string };
@@ -15,28 +16,38 @@ export class ConvertProspectingLead {
   constructor(
     private crmLeadRepo: ICrmLeadRepository,
     private leadRepo: ILeadRepository,
-    private leadActivityRepo: ILeadActivityRepository
+    private leadActivityRepo: ILeadActivityRepository,
+    private stageRepo: IFunnelStageRepository,
+    private nicheRepo: INicheRepository
   ) {}
 
-  async execute(input: Input): Promise<Result> {
+  async execute({ prospectingLeadId, companyId, userId }: Input): Promise<Result> {
     try {
-      const already = await this.crmLeadRepo.findByProspectingLeadId(
-        input.prospectingLeadId,
-        input.companyId
-      );
+      const already = await this.crmLeadRepo.findByProspectingLeadId(prospectingLeadId, companyId);
       if (already) return { ok: false, error: "Lead já convertido" };
 
-      const prospectingLead = await this.leadRepo.findById(input.prospectingLeadId, input.companyId);
+      const prospectingLead = await this.leadRepo.findById(prospectingLeadId, companyId);
       if (!prospectingLead) return { ok: false, error: "Lead de prospecção não encontrado" };
 
+      // Regra de negócio: garante que as etapas do funil existem e escolhe a etapa de
+      // entrada — a primeira etapa "normal" por posição (fallback: a primeira de todas).
+      const seed = await new SeedFunnelStages(this.stageRepo).execute({ companyId });
+      const stages = seed.ok ? seed.data : await this.stageRepo.findAllByCompany(companyId);
+      const targetStage =
+        stages.filter((s) => s.kind === "normal").sort((a, b) => a.position - b.position)[0] ??
+        stages.slice().sort((a, b) => a.position - b.position)[0];
+      if (!targetStage) return { ok: false, error: "Nenhuma etapa de funil disponível" };
+
+      const niche = await this.nicheRepo.findById(prospectingLead.nicheId, companyId);
+
       const crmLead = await this.crmLeadRepo.create({
-        companyId: input.companyId,
+        companyId,
         prospectingLeadId: prospectingLead.id,
-        stageId: input.targetStageId,
+        stageId: targetStage.id,
         name: prospectingLead.name,
         phone: prospectingLead.phone,
         email: prospectingLead.email,
-        niche: input.nicheName,
+        niche: niche?.name ?? null,
         subniche: null,
         origin: "prospecting",
         value: null,
@@ -44,12 +55,12 @@ export class ConvertProspectingLead {
       });
 
       await this.leadActivityRepo.create({
-        companyId: input.companyId,
+        companyId,
         leadId: crmLead.id,
         fromStageId: null,
-        toStageId: input.targetStageId,
+        toStageId: targetStage.id,
         description: "Lead convertido da prospecção",
-        createdBy: input.userId,
+        createdBy: userId,
       });
 
       return { ok: true, data: crmLead };

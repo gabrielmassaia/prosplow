@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { getNichosBootstrapAction } from "@/app/actions/nichos/get-nichos-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -22,6 +24,11 @@ export default function NichosPage() {
 }
 
 async function NichosDataLoader() {
-  const { niches } = await getNichosBootstrapAction();
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const nicheRepo = new DrizzleNicheRepository(db);
+  const niches = await nicheRepo.findAllByCompany(companyId);
+
   return <NichosContent initialNiches={niches} />;
 }

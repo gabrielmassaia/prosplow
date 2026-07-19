@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { getCampanhasBootstrapAction } from "@/app/actions/campanhas/get-campanhas-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -24,6 +27,16 @@ export default function CampanhasPage() {
 }
 
 async function CampanhasDataLoader() {
-  const { campaigns, niches } = await getCampanhasBootstrapAction();
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const nicheRepo = new DrizzleNicheRepository(db);
+
+  const [campaigns, niches] = await Promise.all([
+    campaignRepo.findAllByCompany(companyId),
+    nicheRepo.findAllByCompany(companyId),
+  ]);
+
   return <CampanhasContent initialCampaigns={campaigns} initialNiches={niches} />;
 }

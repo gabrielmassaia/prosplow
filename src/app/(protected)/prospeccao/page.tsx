@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Map, Tag, TrendingUp, Users } from "lucide-react";
 
+import { QUALIFIED_SCORE_THRESHOLD } from "@/domain/lead-qualification";
 import { requireCompany, requireUser } from "@/lib/tenant";
 import { db } from "@/infrastructure/db";
 import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
@@ -55,7 +56,7 @@ export default async function DashboardPage() {
       href: "/prospeccao/leads",
     },
     {
-      label: "Qualificados (score 70+)",
+      label: `Qualificados (score ${QUALIFIED_SCORE_THRESHOLD}+)`,
       value: leadCounts.qualified,
       icon: TrendingUp,
       color: "text-emerald-600 bg-emerald-50",
