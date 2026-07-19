@@ -4,7 +4,7 @@
 
 ## Task 8: Página do Funil — `src/app/(protected)/funil/page.tsx`
 
-Mesmo formato de Server Component thin das páginas da Fase 2 (`generateMetadata` + `BasePageLayout` + `Suspense` + Data Loader assíncrono chamando a bootstrap action). A diferença em relação às páginas da Fase 2: `FunilContent` usa `@dnd-kit`, que toca `document`/`window` durante a inicialização dos sensores — precisa entrar via `next/dynamic` com `ssr: false`, pela mesma razão que `CampaignMap`/`LeadsMap` (Leaflet) precisam disso na Fase 2. A regra do projeto é literal: **Leaflet / DnD → sempre `dynamic(() => import(...), { ssr: false })`.**
+Mesmo formato de Server Component thin das páginas da Fase 2 (`generateMetadata` + `BasePageLayout` + `Suspense` + Data Loader assíncrono **lendo direto dos repositórios** — sem bootstrap action). A diferença em relação às páginas da Fase 2: `FunilContent` usa `@dnd-kit`, que toca `document`/`window` durante a inicialização dos sensores — precisa entrar via `next/dynamic` com `ssr: false`, pela mesma razão que `CampaignMap`/`LeadsMap` (Leaflet) precisam disso na Fase 2. A regra do projeto é literal: **Leaflet / DnD → sempre `dynamic(() => import(...), { ssr: false })`.**
 
 A diferença é *onde* o `dynamic(..., { ssr: false })` pode ser chamado: `CampaignMap`/`LeadsMap` são importados dinamicamente de dentro de `CampanhaDetailContent`/`LeadsContent`, que já são `"use client"`. Aqui, `page.tsx` é um Server Component — e o Next.js 16 não permite `ssr: false` dentro de um Server Component (`Ecmascript file had an error: "ssr: false" is not allowed with next/dynamic in Server Components`). A chamada precisa morar dentro de um arquivo `"use client"` próprio.
 
@@ -29,7 +29,11 @@ export const FunilContent = dynamic(
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { getFunilBootstrapAction } from "@/app/actions/funil/get-funil-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCrmLeadRepository } from "@/infrastructure/repositories/DrizzleCrmLeadRepository";
+import { DrizzleFunnelStageRepository } from "@/infrastructure/repositories/DrizzleFunnelStageRepository";
+import { SeedFunnelStages } from "@/use-cases/funil/SeedFunnelStages";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -52,7 +56,17 @@ export default function FunilPage() {
 }
 
 async function FunilDataLoader() {
-  const { stages, leads } = await getFunilBootstrapAction();
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const stageRepo = new DrizzleFunnelStageRepository(db);
+  const crmLeadRepo = new DrizzleCrmLeadRepository(db);
+
+  // Seed lazy: garante as etapas padrão na primeira visita de uma empresa nova.
+  const seedResult = await new SeedFunnelStages(stageRepo).execute({ companyId });
+  const stages = seedResult.ok ? seedResult.data : await stageRepo.findAllByCompany(companyId);
+  const leads = await crmLeadRepo.findAllByCompany(companyId);
+
   return <FunilContent initialStages={stages} initialLeads={leads} />;
 }
 ```

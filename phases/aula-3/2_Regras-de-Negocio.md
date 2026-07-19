@@ -170,18 +170,21 @@ export class UpdateCrmLead {
 }
 ```
 
-- [x] **Criar `src/use-cases/funil/ConvertProspectingLead.ts`** — checa duplicidade via `findByProspectingLeadId` (idempotência), carrega o `ProspectingLead`, cria o `CrmLead` (`origin: "prospecting"`) na etapa alvo resolvida pela action, registra atividade `"Lead convertido da prospecção"`.
+- [x] **Criar `src/use-cases/funil/ConvertProspectingLead.ts`** — concentra **toda** a regra de conversão: checa duplicidade via `findByProspectingLeadId` (idempotência), carrega o `ProspectingLead`, **garante o seed do funil e escolhe a etapa de entrada** (primeira `kind: "normal"` por posição), resolve o nome do nicho, cria o `CrmLead` (`origin: "prospecting"`) e registra a atividade `"Lead convertido da prospecção"`. A action fica só com a fiação de dependências.
+
+> **Por que a escolha da etapa vive no use case e não na action?** "Em qual etapa um lead convertido entra" é uma **regra de negócio** — se amanhã a regra virar "entra na etapa de Triagem" ou "na última usada", quem muda é o domínio, não o controller. A action continua fina (guard → instanciar → chamar). Por isso o use case recebe também `stageRepo` e `nicheRepo` e compõe o `SeedFunnelStages` internamente.
 
 ```typescript
 import type { CrmLead, ICrmLeadRepository } from "@/domain/repositories/ICrmLeadRepository";
+import type { IFunnelStageRepository } from "@/domain/repositories/IFunnelStageRepository";
 import type { ILeadActivityRepository } from "@/domain/repositories/ILeadActivityRepository";
 import type { ILeadRepository } from "@/domain/repositories/ILeadRepository";
+import type { INicheRepository } from "@/domain/repositories/INicheRepository";
+import { SeedFunnelStages } from "@/use-cases/funil/SeedFunnelStages";
 
 type Input = {
   prospectingLeadId: string;
   companyId: string;
-  nicheName: string | null;
-  targetStageId: string;
   userId: string;
 };
 type Result = { ok: true; data: CrmLead } | { ok: false; error: string };
@@ -190,28 +193,38 @@ export class ConvertProspectingLead {
   constructor(
     private crmLeadRepo: ICrmLeadRepository,
     private leadRepo: ILeadRepository,
-    private leadActivityRepo: ILeadActivityRepository
+    private leadActivityRepo: ILeadActivityRepository,
+    private stageRepo: IFunnelStageRepository,
+    private nicheRepo: INicheRepository
   ) {}
 
-  async execute(input: Input): Promise<Result> {
+  async execute({ prospectingLeadId, companyId, userId }: Input): Promise<Result> {
     try {
-      const already = await this.crmLeadRepo.findByProspectingLeadId(
-        input.prospectingLeadId,
-        input.companyId
-      );
+      const already = await this.crmLeadRepo.findByProspectingLeadId(prospectingLeadId, companyId);
       if (already) return { ok: false, error: "Lead já convertido" };
 
-      const prospectingLead = await this.leadRepo.findById(input.prospectingLeadId, input.companyId);
+      const prospectingLead = await this.leadRepo.findById(prospectingLeadId, companyId);
       if (!prospectingLead) return { ok: false, error: "Lead de prospecção não encontrado" };
 
+      // Regra de negócio: garante que as etapas existem e escolhe a etapa de entrada —
+      // a primeira "normal" por posição (fallback: a primeira de todas).
+      const seed = await new SeedFunnelStages(this.stageRepo).execute({ companyId });
+      const stages = seed.ok ? seed.data : await this.stageRepo.findAllByCompany(companyId);
+      const targetStage =
+        stages.filter((s) => s.kind === "normal").sort((a, b) => a.position - b.position)[0] ??
+        stages.slice().sort((a, b) => a.position - b.position)[0];
+      if (!targetStage) return { ok: false, error: "Nenhuma etapa de funil disponível" };
+
+      const niche = await this.nicheRepo.findById(prospectingLead.nicheId, companyId);
+
       const crmLead = await this.crmLeadRepo.create({
-        companyId: input.companyId,
+        companyId,
         prospectingLeadId: prospectingLead.id,
-        stageId: input.targetStageId,
+        stageId: targetStage.id,
         name: prospectingLead.name,
         phone: prospectingLead.phone,
         email: prospectingLead.email,
-        niche: input.nicheName,
+        niche: niche?.name ?? null,
         subniche: null,
         origin: "prospecting",
         value: null,
@@ -219,12 +232,12 @@ export class ConvertProspectingLead {
       });
 
       await this.leadActivityRepo.create({
-        companyId: input.companyId,
+        companyId,
         leadId: crmLead.id,
         fromStageId: null,
-        toStageId: input.targetStageId,
+        toStageId: targetStage.id,
         description: "Lead convertido da prospecção",
-        createdBy: input.userId,
+        createdBy: userId,
       });
 
       return { ok: true, data: crmLead };
@@ -254,31 +267,22 @@ Leads criados **manualmente** entram em "Triagem" (posição 0) — precisam de 
 
 ## Task 7: Server Actions
 
-- [x] **Criar `src/app/actions/funil/get-funil-bootstrap.ts`** — roda o seed lazy (se `stages.length === 0`) e retorna `{ stages, leads }`.
+> A leitura inicial do funil **não** tem Server Action de bootstrap: como acontece no servidor, o Data Loader da página (`funil/page.tsx`, ver `3_Interface-Kanban.md`) roda o seed lazy e lê etapas + leads direto dos repositórios. O código do Data Loader:
 
-```typescript
-"use server";
-
-import { requireCompany, requireUser } from "@/lib/tenant";
-import { db } from "@/infrastructure/db";
-import { DrizzleCrmLeadRepository } from "@/infrastructure/repositories/DrizzleCrmLeadRepository";
-import { DrizzleFunnelStageRepository } from "@/infrastructure/repositories/DrizzleFunnelStageRepository";
-import { SeedFunnelStages } from "@/use-cases/funil/SeedFunnelStages";
-
-export async function getFunilBootstrapAction() {
+```tsx
+async function FunilDataLoader() {
   const user = await requireUser();
   const { companyId } = await requireCompany(user.id);
 
   const stageRepo = new DrizzleFunnelStageRepository(db);
   const crmLeadRepo = new DrizzleCrmLeadRepository(db);
 
-  const seedUseCase = new SeedFunnelStages(stageRepo);
-  const seedResult = await seedUseCase.execute({ companyId });
+  // Seed lazy: garante as etapas padrão na primeira visita de uma empresa nova.
+  const seedResult = await new SeedFunnelStages(stageRepo).execute({ companyId });
   const stages = seedResult.ok ? seedResult.data : await stageRepo.findAllByCompany(companyId);
-
   const leads = await crmLeadRepo.findAllByCompany(companyId);
 
-  return { stages, leads };
+  return <FunilContent initialStages={stages} initialLeads={leads} />;
 }
 ```
 
@@ -426,7 +430,7 @@ export async function getLeadActivitiesAction(leadId: string) {
 }
 ```
 
-- [x] **Criar `src/app/actions/leads/convert-prospecting-lead.ts`** — resolve o nome do nicho (via `DrizzleNicheRepository`) e a etapa alvo ("Novo", ou a primeira `kind: "normal"` por posição) antes de chamar `ConvertProspectingLead`. Também dispara o seed lazy — um lead de prospecção pode ser convertido antes mesmo de o usuário ter aberto `/funil` uma vez.
+- [x] **Criar `src/app/actions/leads/convert-prospecting-lead.ts`** — controller fino: só instancia os repositórios, monta o `ConvertProspectingLead` e chama. Toda a regra (seed lazy, escolha da etapa de entrada, resolução do nicho) mora no use case.
 
 ```typescript
 "use server";
@@ -438,7 +442,6 @@ import { DrizzleFunnelStageRepository } from "@/infrastructure/repositories/Driz
 import { DrizzleLeadActivityRepository } from "@/infrastructure/repositories/DrizzleLeadActivityRepository";
 import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
 import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
-import { SeedFunnelStages } from "@/use-cases/funil/SeedFunnelStages";
 import { ConvertProspectingLead } from "@/use-cases/funil/ConvertProspectingLead";
 
 export async function convertProspectingLeadAction(prospectingLeadId: string) {
@@ -451,41 +454,21 @@ export async function convertProspectingLeadAction(prospectingLeadId: string) {
   const stageRepo = new DrizzleFunnelStageRepository(db);
   const leadActivityRepo = new DrizzleLeadActivityRepository(db);
 
-  const seedResult = await new SeedFunnelStages(stageRepo).execute({ companyId });
-  const stages = seedResult.ok ? seedResult.data : await stageRepo.findAllByCompany(companyId);
-
-  const targetStage =
-    stages.filter((s) => s.kind === "normal").sort((a, b) => a.position - b.position)[0] ??
-    stages.sort((a, b) => a.position - b.position)[0];
-
-  if (!targetStage) return { ok: false as const, error: "Nenhuma etapa de funil disponível" };
-
-  const prospectingLead = await leadRepo.findById(prospectingLeadId, companyId);
-  const niche = prospectingLead ? await nicheRepo.findById(prospectingLead.nicheId, companyId) : null;
-
-  const useCase = new ConvertProspectingLead(crmLeadRepo, leadRepo, leadActivityRepo);
-  return useCase.execute({
-    prospectingLeadId,
-    companyId,
-    nicheName: niche?.name ?? null,
-    targetStageId: targetStage.id,
-    userId: user.id,
-  });
+  const useCase = new ConvertProspectingLead(
+    crmLeadRepo,
+    leadRepo,
+    leadActivityRepo,
+    stageRepo,
+    nicheRepo
+  );
+  return useCase.execute({ prospectingLeadId, companyId, userId: user.id });
 }
 ```
 
-- [x] **Modificar `src/app/actions/leads/get-leads-bootstrap.ts`** — agora também retorna `convertedProspectingLeadIds: string[]`, usado pela UI de Leads para esconder/desabilitar o botão de conversão em leads já convertidos.
+- [x] **Modificar `src/app/(protected)/prospeccao/leads/page.tsx`** — o Data Loader da página de Leads (que lê direto no Server Component, ver aula-2) passa a carregar também os `convertedProspectingLeadIds` via `DrizzleCrmLeadRepository.findConvertedProspectingLeadIds`, usados pela UI para esconder/desabilitar o botão de conversão em leads já convertidos. Não há Server Action de bootstrap — a leitura inicial é direta.
 
-```typescript
-"use server";
-
-import { requireCompany, requireUser } from "@/lib/tenant";
-import { db } from "@/infrastructure/db";
-import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
-import { DrizzleCrmLeadRepository } from "@/infrastructure/repositories/DrizzleCrmLeadRepository";
-import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
-
-export async function getLeadsBootstrapAction() {
+```tsx
+async function LeadsDataLoader() {
   const user = await requireUser();
   const { companyId } = await requireCompany(user.id);
 
@@ -499,7 +482,13 @@ export async function getLeadsBootstrapAction() {
     crmLeadRepo.findConvertedProspectingLeadIds(companyId),
   ]);
 
-  return { leads, campaigns, convertedProspectingLeadIds };
+  return (
+    <LeadsContent
+      initialLeads={leads}
+      initialCampaigns={campaigns}
+      initialConvertedProspectingLeadIds={convertedProspectingLeadIds}
+    />
+  );
 }
 ```
 

@@ -4,7 +4,7 @@
 
 ## Task 10: Integração — botão "Converter para CRM" em `LeadsContent`
 
-No sheet de detalhe já existente na página de Leads (Fase 2), foi adicionado um botão "Converter para CRM" (ícone `Kanban`), desabilitado quando o lead já foi convertido (checagem via `convertedProspectingLeadIds`, vindo do bootstrap). Ao converter com sucesso, um toast com ação "Ver no funil" navega para `/funil`.
+No sheet de detalhe já existente na página de Leads (Fase 2), foi adicionado um botão "Converter para CRM" (ícone `Kanban`), desabilitado quando o lead já foi convertido (checagem via `convertedProspectingLeadIds`, carregado direto no Data Loader da página de Leads). Ao converter com sucesso, um toast com ação "Ver no funil" navega para `/funil`.
 
 - [x] **Modificar `src/app/(protected)/prospeccao/leads/_components/LeadsContent.tsx`**
 
@@ -92,13 +92,25 @@ E, dentro do sheet de detalhe (JSX), logo antes do bloco "Mudar status":
 </div>
 ```
 
-- [x] **Modificar `src/app/(protected)/prospeccao/leads/page.tsx`** — repassar `convertedProspectingLeadIds`:
+- [x] **Modificar `src/app/(protected)/prospeccao/leads/page.tsx`** — o Data Loader (que lê direto, sem bootstrap action) passa a carregar também os ids já convertidos:
 
 ```diff
  async function LeadsDataLoader() {
--  const { leads, campaigns } = await getLeadsBootstrapAction();
+   const user = await requireUser();
+   const { companyId } = await requireCompany(user.id);
+
+   const leadRepo = new DrizzleLeadRepository(db);
+   const campaignRepo = new DrizzleCampaignRepository(db);
++  const crmLeadRepo = new DrizzleCrmLeadRepository(db);
+
+-  const [leads, campaigns] = await Promise.all([
++  const [leads, campaigns, convertedProspectingLeadIds] = await Promise.all([
+     leadRepo.findAllByCompany(companyId),
+     campaignRepo.findAllByCompany(companyId),
++    crmLeadRepo.findConvertedProspectingLeadIds(companyId),
+   ]);
+
 -  return <LeadsContent initialLeads={leads} initialCampaigns={campaigns} />;
-+  const { leads, campaigns, convertedProspectingLeadIds } = await getLeadsBootstrapAction();
 +  return (
 +    <LeadsContent
 +      initialLeads={leads}
