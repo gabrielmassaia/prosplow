@@ -138,6 +138,42 @@ npx prettier --check .
 
 ---
 
+## Commits sugeridos da fase (na branch `aula-1`)
+
+Durante a live, a Aula 1 inteira vive na branch `aula-1`. A ideia é commitar **por funcionalidade** (um commit por arquivo numérico desta pasta), na ordem em que a audiência viu, para que o histórico conte a mesma história do vídeo. Só commite depois que a etapa estiver rodando — o desenvolvedor commita manualmente (o agente nunca commita sozinho).
+
+```bash
+git checkout -b aula-1              # ou: git switch aula-1
+
+# 1_Setup-Projeto-e-Dependencias.md
+git add . && git commit -m "chore: setup Next 16 + Tailwind + deps + drizzle.config"
+
+# 2_Banco-de-Dados.md
+git add . && git commit -m "feat: pool Postgres singleton + schema da Fase 1"
+
+# 3_Dominio-e-Repositorios.md
+git add . && git commit -m "feat: contratos de domínio + repositórios Drizzle (user/company)"
+
+# 4_Autenticacao-Better-Auth.md
+git add . && git commit -m "feat: Better Auth + CreateUserWithCompany + helpers de tenant"
+
+# 5_Actions-Login-e-Cadastro.md
+git add . && git commit -m "feat: server actions signupAction/loginAction"
+
+# 6_Proxy-Protecao-de-Rotas.md
+git add . && git commit -m "feat: proxy de proteção de rotas (Next 16)"
+
+# 7_UI-Paginas-Auth.md
+git add . && git commit -m "feat: telas de login e cadastro"
+
+# 8_Layout-Protegido-e-Sidebar.md
+git add . && git commit -m "feat: layout protegido + sidebar + landing"
+```
+
+Ao final da fase, a branch `aula-1` é a **base** de tudo: a `aula-2` nasce dela (`git switch -c aula-2`), a `aula-3` da `aula-2`, e assim por diante — sempre em uma direção, cada fase fazendo `merge` da anterior. Nunca o contrário.
+
+---
+
 ## Próximos passos — Fase 2
 
 Na próxima fase (`aula-2/`) vamos construir o módulo de prospecção completo:

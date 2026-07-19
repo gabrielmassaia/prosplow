@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 
-import { login } from "@/app/actions/auth/login";
+import { loginAction } from "@/app/actions/auth/login";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,9 +22,9 @@ export function LoginForm() {
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
-    const result = await login({
-      email: form.get("email") as string,
-      password: form.get("password") as string,
+    const result = await loginAction({
+      email: String(form.get("email") ?? ""),
+      password: String(form.get("password") ?? ""),
     });
 
     setLoading(false);

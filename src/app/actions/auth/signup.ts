@@ -13,7 +13,7 @@ const signupSchema = z.object({
   companyName: z.string().min(2, "Nome da empresa deve ter ao menos 2 caracteres"),
 });
 
-export async function signup(formData: {
+export async function signupAction(formData: {
   name: string;
   email: string;
   password: string;
