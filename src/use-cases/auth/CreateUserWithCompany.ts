@@ -1,3 +1,9 @@
+// Exceção pragmática ao DIP: este use case depende do Better Auth (`auth`) concreto
+// em vez de uma interface de domínio. Criar um usuário é, na prática, uma fronteira de
+// framework — o Better Auth É a regra de "como um usuário nasce" (hash de senha, sessão,
+// verificação). Abstraí-lo por trás de um IAuthService só recriaria a API do Better Auth
+// sem ganho real de troca de provider. Todo o resto da persistência (empresa, membro,
+// funil) continua atrás de interfaces injetadas.
 import { auth } from "@/lib/auth";
 import type { ICompanyRepository } from "@/domain/repositories/ICompanyRepository";
 

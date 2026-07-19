@@ -8,7 +8,7 @@
 
 **Arquitetura:** Clean Architecture pragmático. Schema → Domain (interfaces) → Infrastructure (Drizzle + services externos) → Use Cases (lógica de negócio) → Actions (controllers finos) → UI (Server e Client Components).
 
-**Tech Stack adicionado:** `leaflet`, `react-leaflet`, `sonner`, `date-fns`, `react-hook-form`, `@hookform/resolvers`. shadcn/ui: `dialog`, `alert-dialog`, `sheet`, `table`, `select`, `slider`, `switch`, `checkbox`, `textarea`, `tabs`, `badge`, `avatar`.
+**Tech Stack adicionado:** `leaflet`, `react-leaflet`, `sonner`, `date-fns`. shadcn/ui: `dialog`, `alert-dialog`, `sheet`, `table`, `select`, `slider`, `switch`, `checkbox`, `textarea`, `tabs`, `badge`, `avatar`. (Os formulários desta fase são `<form>` nativo + `FormData` + `useState` — não usamos `react-hook-form`.)
 
 ---
 
@@ -31,7 +31,6 @@
 - Repositórios recebem `db` no construtor, nunca importam globalmente
 - `domain/` não importa nada externo (sem Drizzle, sem Next.js)
 - Leaflet/DnD: sempre `dynamic(() => import(...), { ssr: false })`
-- NUNCA commitar — o desenvolvedor faz os commits manualmente
 - Rota protegida usa `src/app/(protected)/` (não `(app)/` como no SPEC)
 - Modelo Cloudflare AI vem de `process.env.CLOUDFLARE_AI_MODEL`
 
@@ -39,9 +38,9 @@
 
 ## Conceitos que você precisa entender antes de codar
 
-### Server Component como Data Loader vs Client Component buscando via API
+### Server Component lendo direto vs Client Component buscando via API
 
-Toda página de listagem desta fase (nichos, campanhas, detalhe da campanha, leads) segue o mesmo formato:
+Toda página de listagem desta fase (nichos, campanhas, detalhe da campanha, leads) segue o mesmo formato. A chave: **a carga inicial é lida direto do repositório, dentro do Server Component** — sem Server Action e sem rota HTTP no meio.
 
 ```tsx
 export async function generateMetadata(): Promise<Metadata> {
@@ -59,27 +58,36 @@ export default function LeadsPage() {
 }
 
 async function LeadsDataLoader() {
-  const { leads, campaigns } = await getLeadsBootstrapAction();
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const leadRepo = new DrizzleLeadRepository(db);
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const [leads, campaigns] = await Promise.all([
+    leadRepo.findAllByCompany(companyId),
+    campaignRepo.findAllByCompany(companyId),
+  ]);
+
   return <LeadsContent initialLeads={leads} initialCampaigns={campaigns} />;
 }
 ```
 
-`page.tsx` é sempre um **Server Component enxuto**: `generateMetadata` + `BasePageLayout` (layout compartilhado) + `Suspense` com skeleton (`LoadingContent`) + uma função `async` interna (o "Data Loader") que chama uma **Server Action de bootstrap** (`get{Recurso}BootstrapAction`) e passa o resultado como prop para um **Client Component** colocado em `_components/` dentro da própria rota (ex: `nichos/_components/NichosContent.tsx`), que concentra toda a interatividade (formulários, dialogs, filtros, chamadas de mutação).
+`page.tsx` é sempre um **Server Component enxuto**: `generateMetadata` + `BasePageLayout` (layout compartilhado) + `Suspense` com skeleton (`LoadingContent`) + uma função `async` interna (o "Data Loader"). O Data Loader **instancia o repositório e consulta o banco diretamente** — ele já roda no servidor, então não há motivo para embrulhar essa leitura numa Server Action. O resultado vai como prop (`initial*`) para um **Client Component** em `_components/` dentro da própria rota (ex: `nichos/_components/NichosContent.tsx`), que concentra a interatividade (formulários, dialogs, filtros, mutações).
 
-**Por que não simplesmente um Client Component com `useEffect(() => fetch("/api/nichos"))`?** Essa é a alternativa mais óbvia para quem vem de React puro (SPA), e tecnicamente funciona — mas custa três coisas neste projeto:
+> **Regra de ouro leitura × escrita:** leitura que acontece **no servidor** (a carga inicial da página) é feita **direto no Server Component**. Server Action é para **escrita** (mutações) e para **leitura disparada pelo cliente** (o polling, mais abaixo). Uma Server Action é, por baixo, um `POST` — usá-la para a carga inicial só adiciona um round-trip HTTP inútil, sem ganho de cache.
 
-| | Server Component + bootstrap action | Client Component + rota GET |
+**Por que não um Client Component com `useEffect(() => fetch("/api/nichos"))`?** É a alternativa óbvia para quem vem de React puro (SPA), e funciona — mas custa três coisas:
+
+| | Server Component lendo direto | Client Component + rota GET |
 |---|---|---|
 | Onde roda a query no banco | No servidor, antes do HTML ser enviado | No servidor também, mas atrás de uma rota HTTP extra |
 | Tela em branco / spinner inicial | Não precisa — `Suspense` mostra o skeleton só enquanto o Data Loader resolve, e o conteúdo real já chega pronto | Sempre existe um primeiro render vazio até o `useEffect` responder |
-| Onde fica o guard de tenant (`requireUser`/`requireCompany`) | Uma vez, dentro da Server Action, reaproveitada tanto pelo Data Loader quanto por qualquer mutação | Duplicado: uma vez na rota GET, outra nas Server Actions de mutação |
-| Superfície exposta | Nenhuma rota HTTP nova — Server Actions não são endpoints públicos versionados | Uma rota `route.ts` por recurso, mesmo sem nenhum consumidor externo |
+| Onde fica o guard de tenant (`requireUser`/`requireCompany`) | Uma vez, no próprio Data Loader | Duplicado: uma vez na rota GET, outra nas Server Actions de mutação |
+| Superfície exposta | Nenhuma rota HTTP nova | Uma rota `route.ts` por recurso, mesmo sem nenhum consumidor externo |
 
-A rota GET só faria sentido se algo **fora** do Next.js (um app mobile, um webhook, outro serviço) precisasse consumir os mesmos dados como API pública. Não é o caso aqui — é a própria página React consumindo, e nesse cenário o Server Component + Server Action elimina a camada HTTP redundante.
+A rota GET só faria sentido se algo **fora** do Next.js (um app mobile, um webhook, outro serviço) precisasse consumir os mesmos dados como API pública. Não é o caso aqui — é a própria página React consumindo.
 
-**Onde fica leitura vs escrita:** tanto o bootstrap de leitura (`get-{recurso}-bootstrap.ts`) quanto as mutações (`create-`, `update-`, `delete-`, `run-`) ficam centralizadas em `src/app/actions/{feature}/*.ts` — não existe um `actions.ts` colocado por rota. O bootstrap é uma Server Action normal, só que é chamada de dentro do Data Loader (Server Component) em vez de por um formulário ou botão.
-
-**Polling sem rota REST:** o `handleRun`/`useEffect` de campanhas e do detalhe da campanha precisa reconsultar o status enquanto a busca roda em background (via `after()`). Em vez de `fetch()` numa rota GET, o Client Component chama a mesma Server Action de bootstrap diretamente — Server Actions podem ser invocadas do client livremente, sem precisar existir como endpoint HTTP.
+**Leitura disparada pelo cliente (polling) — aí sim uma Server Action.** Campanhas e o detalhe da campanha rodam a busca em background (via `after()`, ver `3_Campanhas.md`) e o Client Component faz *polling* do status enquanto ela não termina. O navegador **não fala com o banco** — então esse polling chama uma Server Action dedicada de leitura (`listCampaignsAction`, `getCampaignDetailAction`). É o espelho da carga inicial: como o gatilho parte do browser, precisa existir um endpoint no servidor, e a Server Action é exatamente isso (sem precisar de uma rota REST `route.ts`). Resumo: **read no servidor → direto; read a partir do client → Server Action.**
 
 ---
 
@@ -115,10 +123,10 @@ A rota GET só faria sentido se algo **fora** do Next.js (um app mobile, um webh
 | `src/app/actions/leads/update-lead-status.ts` | Criar | Server Action: atualizar status do lead |
 | `src/app/actions/leads/generate-diagnosis.ts` | Criar | Server Action: diagnóstico IA |
 | `src/app/actions/leads/generate-message.ts` | Criar | Server Action: mensagem IA |
-| `src/app/actions/nichos/get-nichos-bootstrap.ts` | Criar | Server Action: bootstrap de leitura para o Data Loader de nichos |
-| `src/app/actions/campanhas/get-campanhas-bootstrap.ts` | Criar | Server Action: bootstrap de leitura (e polling) para campanhas |
-| `src/app/actions/campanhas/get-campanha-detail-bootstrap.ts` | Criar | Server Action: bootstrap de leitura (e polling) para detalhe da campanha |
-| `src/app/actions/leads/get-leads-bootstrap.ts` | Criar | Server Action: bootstrap de leitura para o Data Loader de leads |
+| `src/app/actions/campanhas/resolve-cep.ts` | Criar | Server Action: geocodifica o CEP (ViaCEP + Nominatim) no servidor, valida com Zod |
+| `src/app/actions/campanhas/list-campaigns.ts` | Criar | Server Action: leitura de campanhas disparada pelo client (polling) |
+| `src/app/actions/campanhas/get-campaign-detail.ts` | Criar | Server Action: leitura do detalhe da campanha disparada pelo client (polling) |
+| `src/domain/lead-qualification.ts` | Criar | Regra de domínio: `QUALIFIED_SCORE_THRESHOLD` + `isQualifiedLead` |
 | `src/components/TagInput.tsx` | Criar | Input de tags reutilizável |
 | `src/components/LeadsMap.tsx` | Criar | Mapa Leaflet de leads (client-only) |
 | `src/components/CampaignMap.tsx` | Criar | Mapa Leaflet de campanha (client-only) |

@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import type { Campaign } from "@/domain/repositories/ICampaignRepository";
 import type { Niche } from "@/domain/repositories/INicheRepository";
 import { createCampaignAction } from "@/app/actions/campanhas/create-campaign";
-import { getCampanhasBootstrapAction } from "@/app/actions/campanhas/get-campanhas-bootstrap";
+import { listCampaignsAction } from "@/app/actions/campanhas/list-campaigns";
+import { resolveCepAction } from "@/app/actions/campanhas/resolve-cep";
 import { runCampaignAction } from "@/app/actions/campanhas/run-campaign";
 import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -86,7 +87,7 @@ export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasC
     if (!hasRunning) return;
 
     const timer = setInterval(async () => {
-      const { campaigns: fresh } = await getCampanhasBootstrapAction();
+      const fresh = await listCampaignsAction();
       setCampaigns((prev) => {
         for (const c of fresh) {
           const old = prev.find((p) => p.id === c.id);
@@ -106,31 +107,16 @@ export function CampanhasContent({ initialCampaigns, initialNiches }: CampanhasC
   async function fetchCep(digits: string) {
     setCepLoading(true);
     setCepError("");
-    try {
-      const viacepRes = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
-      const viacepData = await viacepRes.json();
-      if (viacepData.erro) {
-        setCepError("CEP não encontrado");
-        return;
-      }
-      const city: string = viacepData.localidade;
-      const state: string = viacepData.uf;
-      const query = encodeURIComponent(
-        `${viacepData.logradouro || city}, ${city}, ${state}, Brazil`
-      );
-      const nominatimRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
-        { headers: { "Accept-Language": "pt-BR" } }
-      );
-      const nominatimData = await nominatimRes.json();
-      const lat = nominatimData[0] ? parseFloat(nominatimData[0].lat) : 0;
-      const lon = nominatimData[0] ? parseFloat(nominatimData[0].lon) : 0;
-      setForm((f) => ({ ...f, city, state, latitude: lat, longitude: lon }));
-    } catch {
-      setCepError("Erro ao buscar CEP");
-    } finally {
-      setCepLoading(false);
+    // Geocodificação roda no servidor (resolveCepAction) — ViaCEP + Nominatim ficam
+    // fora do browser, com a resposta externa validada por Zod antes de chegar aqui.
+    const result = await resolveCepAction(digits);
+    setCepLoading(false);
+    if (!result.ok) {
+      setCepError(result.error);
+      return;
     }
+    const { city, state, latitude, longitude } = result.data;
+    setForm((f) => ({ ...f, city, state, latitude, longitude }));
   }
 
   async function handleCreate() {

@@ -63,8 +63,8 @@ export class RunCampaign {
     const niche = await this.nicheRepo.findById(campaign.nicheId, companyId);
     if (!niche) return { ok: false, error: "Nicho não encontrado" };
 
-    await this.campaignRepo.updateStatus(campaignId, companyId, "running");
-
+    // O status "running" já foi marcado pela action (runCampaignAction) antes do after(),
+    // para o cliente ver imediatamente via polling. Aqui só cuidamos de completed/failed.
     try {
       // IA lê o nome + descrição do nicho e gera as tags OSM adequadas.
       // Não é necessário preencher keywords manualmente — o nome do nicho já é suficiente.

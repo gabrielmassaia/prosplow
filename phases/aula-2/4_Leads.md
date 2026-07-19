@@ -74,6 +74,23 @@ export interface ILeadRepository {
 
 ---
 
+## Domínio — regra de "lead qualificado"
+
+- [ ] **Step 2b: Criar `src/domain/lead-qualification.ts`**
+
+> A partir de qual score um lead é "qualificado" é uma **regra de negócio**, não um detalhe de banco. Em vez de repetir o número `70` no SQL do repositório, no label do dashboard e nas telas, definimos uma única fonte da verdade no domínio. O repositório (infra) pode importar do domínio — a seta de dependência aponta para dentro.
+
+```typescript
+// Regra de negócio de domínio: a partir de qual score (0–100) um lead é "qualificado".
+export const QUALIFIED_SCORE_THRESHOLD = 70;
+
+export function isQualifiedLead(score: number): boolean {
+  return score >= QUALIFIED_SCORE_THRESHOLD;
+}
+```
+
+---
+
 ## Infraestrutura — `DrizzleLeadRepository`
 
 - [ ] **Step 3: Criar `src/infrastructure/repositories/DrizzleLeadRepository.ts`**
@@ -82,6 +99,7 @@ export interface ILeadRepository {
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import { QUALIFIED_SCORE_THRESHOLD } from "@/domain/lead-qualification";
 import type {
   CreateLeadData,
   ILeadRepository,
@@ -160,7 +178,7 @@ export class DrizzleLeadRepository implements ILeadRepository {
     const [row] = await this.db
       .select({
         total: sql<number>`count(*)::int`,
-        qualified: sql<number>`count(*) filter (where score >= 70)::int`,
+        qualified: sql<number>`count(*) filter (where score >= ${QUALIFIED_SCORE_THRESHOLD})::int`,
       })
       .from(prospectingLeadsTable)
       .where(eq(prospectingLeadsTable.companyId, companyId));
@@ -365,31 +383,7 @@ export async function generateMessageAction(leadId: string) {
 }
 ```
 
-- [ ] **Step 12: Criar `src/app/actions/leads/get-leads-bootstrap.ts`**
-
-```typescript
-"use server";
-
-import { requireCompany, requireUser } from "@/lib/tenant";
-import { db } from "@/infrastructure/db";
-import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
-import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
-
-export async function getLeadsBootstrapAction() {
-  const user = await requireUser();
-  const { companyId } = await requireCompany(user.id);
-
-  const leadRepo = new DrizzleLeadRepository(db);
-  const campaignRepo = new DrizzleCampaignRepository(db);
-
-  const [leads, campaigns] = await Promise.all([
-    leadRepo.findAllByCompany(companyId),
-    campaignRepo.findAllByCompany(companyId),
-  ]);
-
-  return { leads, campaigns };
-}
-```
+> A leitura inicial dos leads **não** tem Server Action própria: o Data Loader da página (`leads/page.tsx`, mais abaixo) lê direto dos repositórios no servidor. As Server Actions de leads são só de **escrita/IA** (`update-lead-status`, `generate-diagnosis`, `generate-message`).
 
 ---
 
@@ -510,7 +504,7 @@ export default function LeadsMap({
 
 ## Task 17: Leads — `src/app/(protected)/prospeccao/leads/page.tsx`
 
-> Segue o padrão thin-page + Suspense + bootstrap action + `_components/`. Como o Client Component já renderiza seu próprio cabeçalho (título + contador + toggle Lista/Mapa), o `BasePageLayout` é usado sem `title`.
+> Segue o padrão thin-page + Suspense + Data Loader lendo direto + `_components/`. Como o Client Component já renderiza seu próprio cabeçalho (título + contador + toggle Lista/Mapa), o `BasePageLayout` é usado sem `title`.
 
 - [ ] **Step 1: Criar `src/app/(protected)/prospeccao/leads/page.tsx`**
 
@@ -518,7 +512,10 @@ export default function LeadsMap({
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { getLeadsBootstrapAction } from "@/app/actions/leads/get-leads-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -539,7 +536,17 @@ export default function LeadsPage() {
 }
 
 async function LeadsDataLoader() {
-  const { leads, campaigns } = await getLeadsBootstrapAction();
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const leadRepo = new DrizzleLeadRepository(db);
+  const campaignRepo = new DrizzleCampaignRepository(db);
+
+  const [leads, campaigns] = await Promise.all([
+    leadRepo.findAllByCompany(companyId),
+    campaignRepo.findAllByCompany(companyId),
+  ]);
+
   return <LeadsContent initialLeads={leads} initialCampaigns={campaigns} />;
 }
 ```
@@ -667,9 +674,11 @@ export function LeadsContent({ initialLeads, initialCampaigns }: LeadsContentPro
     const url = `https://wa.me/${selected.phoneNormalized}?text=${encodeURIComponent(generatedMessage)}`;
     window.open(url, "_blank");
     if (selected.status === "new" || selected.status === "qualified") {
-      updateLeadStatusAction(selected.id, "whatsapp_opened").then((r) => {
-        if (r.ok) updateLead(selected.id, { status: "whatsapp_opened" });
-      });
+      updateLeadStatusAction(selected.id, "whatsapp_opened")
+        .then((r) => {
+          if (r.ok) updateLead(selected.id, { status: "whatsapp_opened" });
+        })
+        .catch(() => toast.error("Não foi possível atualizar o status do lead"));
     }
   }
 
@@ -772,7 +781,7 @@ export function LeadsContent({ initialLeads, initialCampaigns }: LeadsContentPro
                     <TableRow
                       key={lead.id}
                       className="cursor-pointer"
-                      onClick={() => { setSelected(lead as Lead); setGeneratedMessage(""); }}
+                      onClick={() => { setSelected(lead); setGeneratedMessage(""); }}
                     >
                       <TableCell className="font-medium">{lead.name}</TableCell>
                       <TableCell className="text-muted-foreground">{lead.city}, {lead.state}</TableCell>

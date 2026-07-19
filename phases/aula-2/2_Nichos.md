@@ -282,27 +282,7 @@ export async function deleteNicheAction(id: string) {
 }
 ```
 
-- [ ] **Step 9: Criar `src/app/actions/nichos/get-nichos-bootstrap.ts`**
-
-> Server Action de **leitura** (bootstrap), chamada pelo Data Loader do Server Component da página — não é uma rota GET. Ver "Server Component como Data Loader vs Client Component buscando via API" no início deste documento.
-
-```typescript
-"use server";
-
-import { requireCompany, requireUser } from "@/lib/tenant";
-import { db } from "@/infrastructure/db";
-import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
-
-export async function getNichosBootstrapAction() {
-  const user = await requireUser();
-  const { companyId } = await requireCompany(user.id);
-
-  const repo = new DrizzleNicheRepository(db);
-  const niches = await repo.findAllByCompany(companyId);
-  return { niches };
-}
-```
-
+> A leitura inicial dos nichos **não** tem Server Action própria: como a carga acontece no servidor, o Data Loader da página (`nichos/page.tsx`, mais abaixo) instancia o `DrizzleNicheRepository` e consulta o banco direto. Ver "Server Component lendo direto vs Client Component buscando via API" no `0_`. As Server Actions de nichos são só de **escrita** (`create-`, `update-`, `delete-`).
 
 ---
 
@@ -386,7 +366,7 @@ O botão de remover tag usa o `Button` do shadcn (`variant="ghost" size="icon-xs
 
 ## Task 14: Nichos — `src/app/(protected)/prospeccao/nichos/page.tsx`
 
-> Segue o padrão thin-page + Suspense + bootstrap action + `_components/` explicado em "Conceitos que você precisa entender antes de codar".
+> Segue o padrão thin-page + Suspense + Data Loader lendo direto + `_components/` explicado em "Conceitos que você precisa entender antes de codar".
 
 - [ ] **Step 1: Criar `src/app/(protected)/prospeccao/nichos/page.tsx`**
 
@@ -394,7 +374,9 @@ O botão de remover tag usa o `Button` do shadcn (`variant="ghost" size="icon-xs
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { getNichosBootstrapAction } from "@/app/actions/nichos/get-nichos-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -415,7 +397,12 @@ export default function NichosPage() {
 }
 
 async function NichosDataLoader() {
-  const { niches } = await getNichosBootstrapAction();
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const nicheRepo = new DrizzleNicheRepository(db);
+  const niches = await nicheRepo.findAllByCompany(companyId);
+
   return <NichosContent initialNiches={niches} />;
 }
 ```

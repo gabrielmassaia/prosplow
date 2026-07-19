@@ -9,8 +9,9 @@ import { toast } from "sonner";
 import type { Campaign } from "@/domain/repositories/ICampaignRepository";
 import type { Lead } from "@/domain/repositories/ILeadRepository";
 import type { Niche } from "@/domain/repositories/INicheRepository";
-import { getCampanhaDetailBootstrapAction } from "@/app/actions/campanhas/get-campanha-detail-bootstrap";
+import { getCampaignDetailAction } from "@/app/actions/campanhas/get-campaign-detail";
 import { runCampaignAction } from "@/app/actions/campanhas/run-campaign";
+import { isQualifiedLead } from "@/domain/lead-qualification";
 import { CAMPAIGN_STATUS_CLASSES, CAMPAIGN_STATUS_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -62,13 +63,13 @@ export function CampanhaDetailContent({
   useEffect(() => {
     if (campaign.status !== "running") return;
     const timer = setInterval(async () => {
-      const result = await getCampanhaDetailBootstrapAction(campaign.id);
+      const result = await getCampaignDetailAction(campaign.id);
       if (!result.ok) return;
-      const fresh = result.campaign;
+      const fresh = result.data.campaign;
       if (fresh.status === "completed") {
         clearInterval(timer);
         setCampaign(fresh);
-        setLeads(result.leads);
+        setLeads(result.data.leads);
         setTimeout(() => toast.success(`${fresh.totalFound} leads encontrados`), 0);
       } else if (fresh.status === "failed") {
         clearInterval(timer);
@@ -87,7 +88,7 @@ export function CampanhaDetailContent({
     setRunning(false);
   }
 
-  const qualified = leads.filter((l) => l.score >= 70).length;
+  const qualified = leads.filter((l) => isQualifiedLead(l.score)).length;
   const whatsappLikely = leads.filter(
     (l) => l.whatsappStatus === "probable" || l.whatsappStatus === "confirmed"
   ).length;

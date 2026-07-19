@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { getLeadsBootstrapAction } from "@/app/actions/leads/get-leads-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleCrmLeadRepository } from "@/infrastructure/repositories/DrizzleCrmLeadRepository";
+import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -24,7 +28,19 @@ export default function LeadsPage() {
 }
 
 async function LeadsDataLoader() {
-  const { leads, campaigns, convertedProspectingLeadIds } = await getLeadsBootstrapAction();
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const leadRepo = new DrizzleLeadRepository(db);
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const crmLeadRepo = new DrizzleCrmLeadRepository(db);
+
+  const [leads, campaigns, convertedProspectingLeadIds] = await Promise.all([
+    leadRepo.findAllByCompany(companyId),
+    campaignRepo.findAllByCompany(companyId),
+    crmLeadRepo.findConvertedProspectingLeadIds(companyId),
+  ]);
+
   return (
     <LeadsContent
       initialLeads={leads}
