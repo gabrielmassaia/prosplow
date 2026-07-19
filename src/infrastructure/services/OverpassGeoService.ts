@@ -46,8 +46,6 @@ export class OverpassGeoService implements IGeoService {
     lines.push(");", "out tags center qt 200;");
     const query = lines.join("\n");
 
-    console.log("[OverpassGeoService] query:", query);
-
     const ENDPOINTS = [
       "https://overpass-api.de/api/interpreter",
       "https://overpass.kumi.systems/api/interpreter",
@@ -65,7 +63,6 @@ export class OverpassGeoService implements IGeoService {
     for (const endpoint of ENDPOINTS) {
       let res: Response;
       try {
-        console.log(`[OverpassGeoService] trying ${endpoint}`);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 35_000);
         res = await fetch(endpoint, {
@@ -103,10 +100,6 @@ export class OverpassGeoService implements IGeoService {
       }
 
       const withName = data.elements.filter((el) => el.tags?.name);
-      console.log(
-        `[OverpassGeoService] total=${data.elements.length} withName=${withName.length}`,
-        withName.slice(0, 3).map((el) => ({ name: el.tags?.name, amenity: el.tags?.amenity, shop: el.tags?.shop }))
-      );
 
       // Limite aplicado aqui, depois de filtrar por nome
       return withName.slice(0, params.maxResults).map((el) => {

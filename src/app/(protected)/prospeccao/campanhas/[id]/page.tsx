@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
-import { getCampanhaDetailBootstrapAction } from "@/app/actions/campanhas/get-campanha-detail-bootstrap";
+import { requireCompany, requireUser } from "@/lib/tenant";
+import { db } from "@/infrastructure/db";
+import { DrizzleCampaignRepository } from "@/infrastructure/repositories/DrizzleCampaignRepository";
+import { DrizzleLeadRepository } from "@/infrastructure/repositories/DrizzleLeadRepository";
+import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
 import { BasePageLayout } from "@/components/BasePageLayout/BasePageLayout";
 import { LoadingContent } from "@/components/shared/loading-content";
 
@@ -31,14 +35,26 @@ export default async function CampanhaDetailPage({ params }: PageProps) {
 }
 
 async function CampanhaDetailDataLoader({ campaignId }: { campaignId: string }) {
-  const result = await getCampanhaDetailBootstrapAction(campaignId);
-  if (!result.ok) redirect("/prospeccao/campanhas");
+  const user = await requireUser();
+  const { companyId } = await requireCompany(user.id);
+
+  const campaignRepo = new DrizzleCampaignRepository(db);
+  const campaign = await campaignRepo.findById(campaignId, companyId);
+  if (!campaign) redirect("/prospeccao/campanhas");
+
+  const nicheRepo = new DrizzleNicheRepository(db);
+  const leadRepo = new DrizzleLeadRepository(db);
+
+  const [niche, leads] = await Promise.all([
+    nicheRepo.findById(campaign.nicheId, companyId),
+    leadRepo.findByCampaign(campaignId, companyId),
+  ]);
 
   return (
     <CampanhaDetailContent
-      initialCampaign={result.campaign}
-      initialNiche={result.niche}
-      initialLeads={result.leads}
+      initialCampaign={campaign}
+      initialNiche={niche}
+      initialLeads={leads}
     />
   );
 }

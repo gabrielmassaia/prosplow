@@ -154,9 +154,11 @@ export function LeadsContent({ initialLeads, initialCampaigns }: LeadsContentPro
     const url = `https://wa.me/${selected.phoneNormalized}?text=${encodeURIComponent(generatedMessage)}`;
     window.open(url, "_blank");
     if (selected.status === "new" || selected.status === "qualified") {
-      updateLeadStatusAction(selected.id, "whatsapp_opened").then((r) => {
-        if (r.ok) updateLead(selected.id, { status: "whatsapp_opened" });
-      });
+      updateLeadStatusAction(selected.id, "whatsapp_opened")
+        .then((r) => {
+          if (r.ok) updateLead(selected.id, { status: "whatsapp_opened" });
+        })
+        .catch(() => toast.error("Não foi possível atualizar o status do lead"));
     }
   }
 
@@ -305,7 +307,7 @@ export function LeadsContent({ initialLeads, initialCampaigns }: LeadsContentPro
                       key={lead.id}
                       className="cursor-pointer"
                       onClick={() => {
-                        setSelected(lead as Lead);
+                        setSelected(lead);
                         setGeneratedMessage("");
                       }}
                     >

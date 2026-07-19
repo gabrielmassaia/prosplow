@@ -136,6 +136,7 @@ Como a Fase 1 já entrega o `AppSidebar` construído sobre `Sidebar`/`SidebarMen
 import Link from "next/link";
 import { Map, Tag, TrendingUp, Users } from "lucide-react";
 
+import { QUALIFIED_SCORE_THRESHOLD } from "@/domain/lead-qualification";
 import { requireCompany, requireUser } from "@/lib/tenant";
 import { db } from "@/infrastructure/db";
 import { DrizzleNicheRepository } from "@/infrastructure/repositories/DrizzleNicheRepository";
@@ -166,7 +167,7 @@ export default async function DashboardPage() {
     { label: "Nichos ativos", value: activeNiches, icon: Tag, color: "text-primary bg-primary/10", href: "/prospeccao/nichos" },
     { label: "Campanhas concluídas", value: completedCampaigns, icon: Map, color: "text-violet-600 bg-violet-50", href: "/prospeccao/campanhas" },
     { label: "Leads prospectados", value: leadCounts.total, icon: Users, color: "text-amber-600 bg-amber-50", href: "/prospeccao/leads" },
-    { label: "Qualificados (score 70+)", value: leadCounts.qualified, icon: TrendingUp, color: "text-emerald-600 bg-emerald-50", href: "/prospeccao/leads" },
+    { label: `Qualificados (score ${QUALIFIED_SCORE_THRESHOLD}+)`, value: leadCounts.qualified, icon: TrendingUp, color: "text-emerald-600 bg-emerald-50", href: "/prospeccao/leads" },
   ];
 
   return (

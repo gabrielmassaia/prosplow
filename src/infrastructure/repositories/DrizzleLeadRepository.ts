@@ -1,6 +1,7 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
+import { QUALIFIED_SCORE_THRESHOLD } from "@/domain/lead-qualification";
 import type {
   CreateLeadData,
   ILeadRepository,
@@ -81,7 +82,7 @@ export class DrizzleLeadRepository implements ILeadRepository {
     const [row] = await this.db
       .select({
         total: sql<number>`count(*)::int`,
-        qualified: sql<number>`count(*) filter (where score >= 70)::int`,
+        qualified: sql<number>`count(*) filter (where score >= ${QUALIFIED_SCORE_THRESHOLD})::int`,
       })
       .from(prospectingLeadsTable)
       .where(eq(prospectingLeadsTable.companyId, companyId));
