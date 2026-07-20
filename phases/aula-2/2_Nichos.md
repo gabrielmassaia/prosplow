@@ -415,7 +415,7 @@ Toda a interatividade (modais, formulário, TagInput, chamadas às actions de mu
 "use client";
 
 import { useState } from "react";
-import { Loader2, Pencil, Plus, Power, Sparkles, Trash2 } from "lucide-react";
+import { FileText, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { Niche } from "@/domain/repositories/INicheRepository";
@@ -465,7 +465,6 @@ export function NichosContent({ initialNiches }: NichosContentProps) {
   const [editing, setEditing] = useState<Niche | null>(null);
   const [form, setForm] = useState<NicheForm>(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
 
   function openCreate() {
     setEditing(null);
@@ -520,41 +519,31 @@ export function NichosContent({ initialNiches }: NichosContentProps) {
     toast.success("Nicho excluído");
   }
 
-  async function generateAI() {
-    if (!form.name) { toast.error("Digite o nome do nicho primeiro"); return; }
-    setGenerating(true);
-    await new Promise((r) => setTimeout(r, 800));
-    const name = form.name.toLowerCase();
-    if (name.includes("restaur") || name.includes("alimenta") || name.includes("pizza")) {
-      setForm((f) => ({
-        ...f,
-        description: "Estabelecimentos de alimentação que precisam de presença digital e captação de clientes online.",
-        keywords: ["restaurante", "pizzaria", "hamburgueria", "cafeteria", "lanchonete"],
-        targetServices: ["Site profissional", "Cardápio digital", "Google Meu Negócio"],
-        commonPains: ["Baixa presença digital", "Poucos pedidos online", "Sem site próprio"],
-        baseMessageTemplate: "Olá, {nome}! Vi que vocês estão em {cidade} e quero apresentar uma solução para aumentar seus pedidos online.",
-      }));
-    } else if (name.includes("salon") || name.includes("beleza") || name.includes("estet")) {
-      setForm((f) => ({
-        ...f,
-        description: "Salões de beleza e estética que buscam atrair novos clientes via redes sociais.",
-        keywords: ["salão", "beleza", "estética", "cabeleireiro", "barbearia"],
-        targetServices: ["Instagram profissional", "Agendamento online", "Google Ads"],
-        commonPains: ["Agenda vazia", "Dependência de indicações", "Sem presença no Instagram"],
-        baseMessageTemplate: "Oi, {nome}! Encontrei o salão de vocês em {cidade}. Posso ajudar a lotar a agenda usando o Instagram.",
-      }));
-    } else {
-      setForm((f) => ({
-        ...f,
-        description: `Empresas do segmento ${form.name} que precisam de marketing digital para crescer.`,
-        keywords: [form.name.toLowerCase()],
-        targetServices: ["Site profissional", "Redes sociais", "Google Ads"],
-        commonPains: ["Baixa presença digital", "Poucos clientes pelo digital"],
-        baseMessageTemplate: "Olá, {nome}! Vi que vocês estão em {cidade} e tenho uma proposta para ajudar a crescer digitalmente.",
-      }));
-    }
-    setGenerating(false);
-    toast.success("Campos preenchidos com sugestão");
+  function fillDefaults() {
+    if (!form.name.trim()) { toast.error("Digite o nome do nicho primeiro"); return; }
+    const name = form.name.trim().toLowerCase();
+    setForm((f) => ({
+      ...f,
+      description: `Empresas do segmento de ${name} que buscam crescer com marketing digital e precisam de presença online profissional.`,
+      keywords: [name, "marketing digital", "presença online"],
+      targetServices: [
+        "Site profissional responsivo",
+        "Gestão de redes sociais",
+        "Google Meu Negócio",
+        "Google Ads",
+        "Tráfego pago",
+      ],
+      commonPains: [
+        "Baixa presença digital",
+        "Poucos clientes vindos da internet",
+        "Dependência de indicações",
+        "Sem site ou site desatualizado",
+        "Dificuldade em atrair clientes na região",
+      ],
+      baseMessageTemplate:
+        "Olá, {nome}! Tudo bem? Vi que vocês estão em {cidade} e notei que poderiam fortalecer a presença digital. Trabalho com empresas do segmento para atrair mais clientes online. Gostaria de conversar sobre como posso ajudar?",
+    }));
+    toast.success("Campos preenchidos com valores sugeridos");
   }
 
   return (
@@ -641,9 +630,9 @@ export function NichosContent({ initialNiches }: NichosContentProps) {
                 <Input id="niche-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Ex: Restaurantes" />
               </div>
               <div className="flex items-end">
-                <Button type="button" variant="outline" size="sm" onClick={generateAI} disabled={generating}>
-                  {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  <span className="ml-1.5">Gerar com IA</span>
+                <Button type="button" variant="outline" size="sm" onClick={fillDefaults}>
+                  <FileText className="h-4 w-4" />
+                  <span className="ml-1.5">Preencher</span>
                 </Button>
               </div>
             </div>
