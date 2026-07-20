@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { FileText, Loader2, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { Niche } from "@/domain/repositories/INicheRepository";
