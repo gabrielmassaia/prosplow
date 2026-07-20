@@ -19,7 +19,7 @@ Resultado esperado: zero erros em `src/`.
 | Acessar `/prospeccao` | Dashboard com cards de métricas (zeros se sem dados) |
 | Acessar `/prospeccao/nichos` | Lista vazia com botão "Criar primeiro nicho" |
 | Criar nicho | Card aparece na grid |
-| Clicar "Gerar com IA" no modal | Campos preenchidos com preset |
+| Clicar "Preencher" no modal | Campos preenchidos com sugestões padrão |
 | Acessar `/prospeccao/campanhas` | Lista vazia |
 | Criar campanha com nicho ativo | Linha aparece na tabela com status "Rascunho" |
 | Clicar "Executar" na campanha | Status muda para "Executando" → "Concluída" com N leads |
