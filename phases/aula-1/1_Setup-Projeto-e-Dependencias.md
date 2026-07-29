@@ -60,6 +60,8 @@ Quando perguntar, escolha:
 - Base color: Neutral
 - CSS variables: Yes
 
+Nessa primeira aula pessoal vamos precisar dos seguintes componentes do shadcn
+
 ```bash
 npx shadcn@latest add button input label card
 ```
@@ -77,6 +79,11 @@ DATABASE_URL=postgresql://user:pass@ep-xxxx.us-east-2.aws.neon.tech/neondb?sslmo
 BETTER_AUTH_URL=http://localhost:3000
 BETTER_AUTH_SECRET=cole_aqui_o_secret
 ```
+
+Parei aqui deu erro
+
+npm error could not determine executable to run
+npm error A complete log of this run can be found in: C:\Users\ga04.oliveira\AppData\Local\npm-cache\_logs\2026-07-29T22_42_41_343Z-debug-0.log
 
 Gere o `BETTER_AUTH_SECRET`:
 ```bash
