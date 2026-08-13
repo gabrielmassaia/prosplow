@@ -80,18 +80,15 @@ BETTER_AUTH_URL=http://localhost:3000
 BETTER_AUTH_SECRET=cole_aqui_o_secret
 ```
 
-Parei aqui deu erro
-
-npm error could not determine executable to run
-npm error A complete log of this run can be found in: C:\Users\ga04.oliveira\AppData\Local\npm-cache\_logs\2026-07-29T22_42_41_343Z-debug-0.log
-
 Gere o `BETTER_AUTH_SECRET`:
 ```bash
-npx better-auth secret
+npx @better-auth/cli@latest secret
 # Cole o valor gerado no .env.local
 ```
 
-> **Se o comando acima falhar** (`npm error could not determine executable to run`), use a alternativa com Node.js nativo:
+> **Por que `@better-auth/cli` e não `better-auth`?** O pacote `better-auth` (instalado no Passo 2) é só a lib de autenticação — ele não tem CLI (`bin`) nenhum. Quem expõe o comando `secret` é o pacote separado `@better-auth/cli`. Rodar `npx better-auth secret` faz o npx procurar um pacote chamado exatamente `better-auth` no registry, achar a lib (sem `bin`) e falhar com `npm error could not determine executable to run`.
+
+> **Alternativa sem depender de rede**, com Node.js nativo:
 > ```bash
 > node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 > ```
